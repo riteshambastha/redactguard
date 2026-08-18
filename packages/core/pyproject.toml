@@ -23,7 +23,10 @@ dependencies = [
     "pyyaml>=6.0",
     "Pillow>=10.0",
     "pydub>=0.25",
+    "pytesseract>=0.3.10",
 ]
+# System dependencies (not pip-installable): ffmpeg (ingest.py), tesseract-ocr
+# (pytesseract - detectors/text/ocr_detector.py). See docker/Dockerfile.
 
 [tool.setuptools.packages.find]
 include = ["redactguard_core*"]

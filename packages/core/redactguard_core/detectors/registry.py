@@ -44,13 +44,38 @@ def register_detector(pii_type: str):
     return _wrap
 
 
-def get_detectors(pii_type: str) -> list[AbstractDetector]:
+_BUILTIN_MODULES = (
+    "redactguard_core.detectors.face",
+    "redactguard_core.detectors.text",
+    "redactguard_core.detectors.audio",
+)
+
+
+def get_detectors(pii_type: str, policy=None) -> list[AbstractDetector]:
     """Instantiate every detector registered for a PII type, including
-    third-party plugins discovered via the `redactguard.detectors` entry
-    point group (see redactguard-plugin-sdk).
+    built-in detectors that ship with core and third-party plugins
+    discovered via the `redactguard.detectors` entry point group (see
+    redactguard-plugin-sdk). If `policy` is given, each instance is
+    configured with it via `AbstractDetector.configure()`.
     """
+    _discover_builtin_detectors()
     _discover_plugins()
-    return [cls() for cls in _REGISTRY.get(pii_type, [])]
+    instances = [cls() for cls in _REGISTRY.get(pii_type, [])]
+    if policy is not None:
+        for instance in instances:
+            instance.configure(policy)
+    return instances
+
+
+def _discover_builtin_detectors() -> None:
+    """Import each detectors/<pii_type> subpackage so its module-level
+    @register_detector(...) decorators run. Cheap to call repeatedly -
+    Python caches imports.
+    """
+    import importlib
+
+    for module_name in _BUILTIN_MODULES:
+        importlib.import_module(module_name)
 
 
 def _discover_plugins() -> None:

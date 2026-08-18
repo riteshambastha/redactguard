@@ -51,11 +51,19 @@ class AbstractDetector(ABC):
     name: str = "unnamed-detector"
     pii_type: str = "unknown"
 
+    def configure(self, policy) -> None:
+        """Optional hook called by the registry with the active
+        PolicyProfile before detect() is used, so a detector can pick up
+        e.g. custom_keywords without every call site threading policy
+        through detect() itself. No-op by default.
+        """
+
     @abstractmethod
     def detect(self, media) -> list[DetectionResult]:
-        """Run detection over decoded media (frames and/or an audio
-        transcript, depending on `pii_type`) and return raw candidate
-        detections - voting/aggregation happens later, in `ensemble/voting.py`.
+        """Run detection over decoded media (a DecodedMedia - see
+        pipeline/ingest.py - bundling sampled frames and/or an audio path,
+        depending on `pii_type`) and return raw candidate detections -
+        voting/aggregation happens later, in `ensemble/voting.py`.
         """
         raise NotImplementedError
 

@@ -1,0 +1,39 @@
+# Walking-skeleton development policy (NOT for production use)
+#
+# Part of RedactGuard - a self-hosted, privacy-preserving video PII
+# redaction toolkit with ensemble detection and a closed-loop
+# verify-then-retry guardrail.
+#
+# Author: Ritesh Ambastha
+
+version: 1
+name: "walking_skeleton_dev"
+description: >
+  Development-only policy for the walking-skeleton phase (see the
+  build-plan log). Only "text" is enabled, since face/audio detectors
+  don't exist yet and would raise NotImplementedError. agreement_threshold
+  is 1 because only a single OCR detector is implemented so far - real
+  ensemble voting (docs/adr/0001) needs a second, independent text
+  detector before this can move to the default threshold of 2.
+
+pii_types:
+  face:
+    enabled: false
+  text:
+    enabled: true
+  audio:
+    enabled: false
+
+agreement_threshold: 1
+
+custom_keywords: []
+
+retry:
+  max_attempts: 3
+  escalation: "lower_threshold_and_widen_margin"
+  on_unresolved: "warn"
+
+# ---------------------------------------------------------------------------
+# RedactGuard - https://github.com/riteshambastha/redactguard
+# Author: Ritesh Ambastha
+# ---------------------------------------------------------------------------

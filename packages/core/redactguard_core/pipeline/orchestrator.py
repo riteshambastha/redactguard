@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from redactguard_core.detectors.base import DetectionResult
 from redactguard_core.detectors.registry import get_detectors
 from redactguard_core.ensemble.voting import vote
+from redactguard_core.pipeline.ingest import decode_media
 from redactguard_core.pipeline.manifest import RedactionManifest
 from redactguard_core.pipeline.policy import PolicyProfile
 from redactguard_core.pipeline.report import AuditReport
@@ -40,28 +41,28 @@ class Orchestrator:
     pipeline diagram and docs/adr/ for why each stage exists.
     """
 
-    def __init__(self, policy: PolicyProfile):
+    def __init__(self, policy: PolicyProfile, sample_fps: float = 1.0):
         self.policy = policy
+        self.sample_fps = sample_fps
         self.retry_controller = RetryController(policy.retry)
 
     def scan(self, source_file: str) -> RedactionManifest:
-        """Dry-run: detect + vote, no video modified. This is the CLI's
-        `redactguard scan` output.
+        """Dry-run: decode + detect + vote, no video modified. This is the
+        CLI's `redactguard scan` output.
         """
+        media = decode_media(source_file, fps=self.sample_fps)
         all_results: list[DetectionResult] = []
         for pii_type, cfg in self.policy.pii_types.items():
             if not cfg.enabled:
                 continue
-            # Real plugin-discovery lookup - returns [] until walking-skeleton
-            # detector implementations exist and register themselves.
-            registered = get_detectors(pii_type)
+            registered = get_detectors(pii_type, policy=self.policy)
             if not registered:
                 raise NotImplementedError(
                     f"No detector implementations registered yet for {pii_type!r} "
                     "- this lands in the walking-skeleton phase."
                 )
             for detector in registered:
-                all_results.extend(detector.detect(media=None))
+                all_results.extend(detector.detect(media))
         spans = vote(all_results, self.policy.agreement_threshold)
         return RedactionManifest(
             source_file=source_file,
