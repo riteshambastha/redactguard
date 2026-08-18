@@ -57,7 +57,13 @@ class RetryController:
                 "caller must emit output with an 'unresolved' warning (ADR-0002), not raise to the user."
             )
         return EscalatedSettings(
-            agreement_threshold=max(1, self.base_agreement_threshold - attempt),
+            # `attempt + 1` (not `attempt`): the caller passes attempt=0 for
+            # the *first* escalation call, meaning verification has already
+            # failed once - that first call needs to actually reduce the
+            # threshold below the base, or an initial verification failure
+            # burns a full retry attempt with literally unchanged settings
+            # (found via a real end-to-end run - see docs/adr/0008).
+            agreement_threshold=max(1, self.base_agreement_threshold - (attempt + 1)),
             blur_margin_px=self.base_margin_px * (2 ** (attempt + 1)),
             attempt=attempt + 1,
         )

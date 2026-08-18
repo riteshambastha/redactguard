@@ -21,10 +21,12 @@ toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
 Author: Ritesh Ambastha
 """
 
-# Importing this subpackage runs the @register_detector("face") decorator
-# in haar_face_detector.py, below - see detectors/registry.py's
-# _discover_builtin_detectors() for where this import is triggered.
+# Importing this subpackage runs the @register_detector("face") decorators
+# in haar_face_detector.py and lbp_face_detector.py, below - see
+# detectors/registry.py's _discover_builtin_detectors() for where this
+# import is triggered.
 from redactguard_core.detectors.face.haar_face_detector import HaarFaceDetector  # noqa: F401
+from redactguard_core.detectors.face.lbp_face_detector import LbpFaceDetector  # noqa: F401
 
 
 # ---------------------------------------------------------------------------

@@ -21,6 +21,8 @@ toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
 Author: Ritesh Ambastha
 """
 
+import re
+
 from PIL import Image, ImageDraw
 from redactguard_core.pipeline.ingest import DecodedMedia, Frame
 from redactguard_core.pipeline.policy import PiiTypeConfig, PolicyProfile
@@ -51,10 +53,19 @@ def _text_frame(text: str) -> Frame:
 
 def test_verify_flags_pii_still_visible_in_redacted_draft():
     # Simulates a botched redaction attempt: the SSN is still legible.
+    # At agreement_threshold=1, both text detectors (Tesseract *and* the
+    # independent MSER structural detector) can each produce their own
+    # span even though their boxes don't spatially coincide closely
+    # enough to also satisfy the real threshold=2 - see docs/adr/0008 for
+    # why that's expected and how the retry loop compensates for it.
     media = DecodedMedia(source_file="fake.mp4", frames=[_text_frame("SSN 123-45-6789 on file")])
     spans = Verifier().verify(media, _POLICY, agreement_threshold=1)
-    assert len(spans) == 1
-    assert spans[0].pii_type == "text"
+    assert len(spans) >= 1
+    assert all(s.pii_type == "text" for s in spans)
+    # OCR can misread a digit (e.g. "123-45-6789" -> "123-46-6789") - check
+    # the shape, not exact digits, for the same reason test_ocr_detector.py
+    # avoids asserting exact OCR output.
+    assert any(s.matched_text and re.fullmatch(r"\d{3}-\d{2}-\d{4}", s.matched_text) for s in spans)
 
 
 def test_verify_passes_clean_when_nothing_detected():
@@ -71,7 +82,7 @@ def test_verify_uses_threshold_1_by_default_not_policy_threshold():
     strict_policy = _POLICY.model_copy(update={"agreement_threshold": 2})
     media = DecodedMedia(source_file="fake.mp4", frames=[_text_frame("SSN 123-45-6789 on file")])
     spans = Verifier().verify(media, strict_policy)  # default agreement_threshold=1
-    assert len(spans) == 1
+    assert len(spans) >= 1
 
 
 # ---------------------------------------------------------------------------

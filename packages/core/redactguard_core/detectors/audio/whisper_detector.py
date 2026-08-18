@@ -126,10 +126,10 @@ class WhisperAudioDetector(AbstractDetector):
     faster-whisper integration itself needs verifying in an environment
     with normal internet access (e.g. Docker build, or your own machine).
 
-    Single detector for now (walking-skeleton phase) - see
-    docs/adr/0001-ensemble-voting-for-detection.md and
-    policies/walking_skeleton_dev.yaml for the agreement_threshold=1
-    interim setting.
+    Paired with EnergyVadDetector as the second, independent audio
+    detector (docs/adr/0008) - real ensemble voting per docs/adr/0001
+    needs both to agree, in time, before an audio PiiSpan is produced at
+    the default agreement_threshold=2.
     """
 
     name = "faster-whisper"

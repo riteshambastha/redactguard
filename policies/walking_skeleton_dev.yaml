@@ -9,12 +9,14 @@
 version: 1
 name: "walking_skeleton_dev"
 description: >
-  Development-only policy for the walking-skeleton phase (see the
-  build-plan log). All three PII types now have exactly one detector each
-  (Haar-cascade face, Tesseract OCR text, faster-whisper audio).
-  agreement_threshold is 1 because none of them have a second, independent
-  detector yet - real ensemble voting (docs/adr/0001) needs that before
-  this moves to the default threshold of 2.
+  Development-only policy. Each PII type now has two independent
+  detectors (face: Haar + LBP cascade; text: Tesseract OCR + MSER region
+  proposal; audio: faster-whisper + energy VAD - see docs/adr/0008), so
+  the real profiles (policies/gdpr_v1.yaml etc.) use the default
+  agreement_threshold=2. This dev policy keeps agreement_threshold=1
+  purely for fast local iteration against a single detector at a time
+  (e.g. while testing a new plugin) without needing a second detector to
+  also fire on the same synthetic test clip.
 
 pii_types:
   face:

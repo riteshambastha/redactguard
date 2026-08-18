@@ -40,11 +40,10 @@ class TesseractOcrDetector(AbstractDetector):
     custom_keywords - this is the "documents, screens, and license plates
     are all just text" detector from docs/adr/0003 and docs/architecture.md.
 
-    Single detector for now (walking-skeleton phase) - a second,
-    independently-implemented OCR/text detector is needed before this PII
-    type can participate in ensemble voting per docs/adr/0001; until then,
-    use a policy with agreement_threshold=1 (see
-    policies/walking_skeleton_dev.yaml).
+    Paired with MserTextRegionDetector as the second, independent text
+    detector (docs/adr/0008) - real ensemble voting per docs/adr/0001
+    needs both to agree, spatially and temporally, before a text PiiSpan
+    is produced at the default agreement_threshold=2.
     """
 
     name = "tesseract-ocr"

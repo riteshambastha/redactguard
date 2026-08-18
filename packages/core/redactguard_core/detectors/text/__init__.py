@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-text detectors (planned)
+text detectors
 
 Part of RedactGuard - a self-hosted, privacy-preserving video PII redaction
 toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
@@ -21,12 +21,13 @@ toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
 Author: Ritesh Ambastha
 """
 
-# Built-in "text" detector implementations land in the walking-skeleton
-# phase of the build plan - see docs/architecture.md.
-#
-# Importing this subpackage runs the @register_detector("text") decorator
-# in ocr_detector.py, below - see detectors/registry.py's
-# _discover_builtin_detectors() for where this import is triggered.
+# Importing this subpackage runs the @register_detector("text") decorators
+# in ocr_detector.py and mser_text_region_detector.py, below - see
+# detectors/registry.py's _discover_builtin_detectors() for where this
+# import is triggered.
+from redactguard_core.detectors.text.mser_text_region_detector import (
+    MserTextRegionDetector,  # noqa: F401
+)
 from redactguard_core.detectors.text.ocr_detector import TesseractOcrDetector  # noqa: F401
 
 

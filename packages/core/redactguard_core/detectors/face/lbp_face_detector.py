@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Haar-cascade face detector
+LBP-cascade face detector - the second, independent face detector
 
 Part of RedactGuard - a self-hosted, privacy-preserving video PII redaction
 toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
@@ -31,33 +31,35 @@ import numpy as np
 from redactguard_core.detectors.base import AbstractDetector, DetectionResult
 from redactguard_core.detectors.registry import register_detector
 
-_MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "haarcascade_frontalface_default.xml")
+_MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "lbpcascade_frontalface_improved.xml")
 
 
 @register_detector("face")
-class HaarFaceDetector(AbstractDetector):
-    """OpenCV Haar-cascade frontal-face detector.
+class LbpFaceDetector(AbstractDetector):
+    """OpenCV LBP-cascade (Local Binary Patterns) frontal-face detector.
 
-    See docs/adr/0006 for why Haar cascade rather than a DNN-based
-    detector (e.g. mediapipe) for this first face detector. Paired with
-    LbpFaceDetector as the second, algorithmically-independent detector
-    (docs/adr/0008) for real ensemble voting (docs/adr/0001).
+    This is deliberately the *second* face detector, paired with
+    HaarFaceDetector: LBP cascades classify on local texture patterns
+    rather than Haar's wavelet-like intensity features, so the two share
+    little of their failure surface (lighting, rotation, and scale
+    sensitivity differ) - see docs/adr/0008 for why that independence,
+    not just having a second detector for its own sake, is what makes
+    ensemble voting (ADR-0001) meaningful rather than redundant.
     """
 
-    name = "opencv-haar-cascade"
+    name = "opencv-lbp-cascade"
     pii_type = "face"
 
     def __init__(self) -> None:
         self._cascade = cv2.CascadeClassifier(_MODEL_PATH)
         if self._cascade.empty():
-            raise RuntimeError(f"Failed to load Haar cascade from {_MODEL_PATH!r}")
+            raise RuntimeError(f"Failed to load LBP cascade from {_MODEL_PATH!r}")
 
     def _detect_boxes(self, gray: np.ndarray):
-        """Thin seam around cv2's detectMultiScale.
-
-        Split out purely so tests can monkeypatch a plain Python method
-        instead of an attribute on the cv2.CascadeClassifier C-extension
-        object, which is read-only and can't be monkeypatched directly.
+        """Thin seam around cv2's detectMultiScale - see
+        HaarFaceDetector._detect_boxes for why this exists (tests
+        monkeypatch this plain method rather than a read-only cv2
+        C-extension attribute).
         """
         return self._cascade.detectMultiScale(
             gray, scaleFactor=1.1, minNeighbors=5, minSize=(24, 24),
@@ -73,7 +75,7 @@ class HaarFaceDetector(AbstractDetector):
                 results.append(
                     DetectionResult(
                         pii_type=self.pii_type,
-                        confidence=0.75,  # Haar cascades don't expose a real score; see docs/threat_model.md
+                        confidence=0.7,  # LBP cascades don't expose a real score either; see docs/threat_model.md
                         start_time_s=frame.timestamp_s,
                         end_time_s=frame.timestamp_s,
                         detector_name=self.name,
