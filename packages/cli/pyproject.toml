@@ -1,0 +1,35 @@
+# redactguard-cli package metadata
+#
+# Part of RedactGuard - a self-hosted, privacy-preserving video PII
+# redaction toolkit with ensemble detection and a closed-loop
+# verify-then-retry guardrail.
+#
+# Author: Ritesh Ambastha
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redactguard-cli"
+version = "0.1.0"
+description = "Command-line interface for RedactGuard"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Ritesh Ambastha", email = "ritesh.linux@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "redactguard-core",
+    "click>=8.1",
+]
+
+[project.scripts]
+redactguard = "redactguard_cli.main:cli"
+
+[tool.setuptools.packages.find]
+include = ["redactguard_cli*"]
+
+# ---------------------------------------------------------------------------
+# RedactGuard - https://github.com/riteshambastha/redactguard
+# Author: Ritesh Ambastha
+# ---------------------------------------------------------------------------

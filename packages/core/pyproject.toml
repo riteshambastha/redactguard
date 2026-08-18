@@ -1,0 +1,34 @@
+# redactguard-core package metadata
+#
+# Part of RedactGuard - a self-hosted, privacy-preserving video PII
+# redaction toolkit with ensemble detection and a closed-loop
+# verify-then-retry guardrail.
+#
+# Author: Ritesh Ambastha
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redactguard-core"
+version = "0.1.0"
+description = "RedactGuard detection, ensemble voting, redaction, and verification pipeline"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Ritesh Ambastha", email = "ritesh.linux@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "Pillow>=10.0",
+    "pydub>=0.25",
+]
+
+[tool.setuptools.packages.find]
+include = ["redactguard_core*"]
+
+# ---------------------------------------------------------------------------
+# RedactGuard - https://github.com/riteshambastha/redactguard
+# Author: Ritesh Ambastha
+# ---------------------------------------------------------------------------

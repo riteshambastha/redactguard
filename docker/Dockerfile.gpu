@@ -1,0 +1,29 @@
+# RedactGuard - optional GPU image
+#
+# Part of RedactGuard - a self-hosted, privacy-preserving video PII
+# redaction toolkit with ensemble detection and a closed-loop
+# verify-then-retry guardrail.
+#
+# Author: Ritesh Ambastha
+
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+
+# Optional GPU-accelerated build. CPU-first is the default target (see
+# docs/adr/ and the build-plan log) - this variant is an opt-in speedup,
+# not the primary supported path for v1.
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY packages/ packages/
+RUN pip install --no-cache-dir -e packages/core -e packages/cli -e packages/plugin-sdk
+
+ENTRYPOINT ["redactguard"]
+CMD ["--help"]
+
+# ---------------------------------------------------------------------------
+# RedactGuard - https://github.com/riteshambastha/redactguard
+# Author: Ritesh Ambastha
+# ---------------------------------------------------------------------------

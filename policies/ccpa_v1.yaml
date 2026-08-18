@@ -1,0 +1,34 @@
+# CCPA-flavored compliance profile
+#
+# Part of RedactGuard - a self-hosted, privacy-preserving video PII
+# redaction toolkit with ensemble detection and a closed-loop
+# verify-then-retry guardrail.
+#
+# Author: Ritesh Ambastha
+
+version: 1
+name: "ccpa_v1"
+description: "CCPA-flavored default profile"
+
+pii_types:
+  face:
+    enabled: true
+  text:
+    enabled: true
+    # OCR-detected on-screen text: documents, screens, receipts, plates.
+  audio:
+    enabled: true
+
+agreement_threshold: 2   # of up to 3 detectors must agree (global, v1)
+
+custom_keywords: []       # user-supplied terms to redact wherever found
+
+retry:
+  max_attempts: 3
+  escalation: "lower_threshold_and_widen_margin"
+  on_unresolved: "warn"   # emit output + audit warning, never hard-fail
+
+# ---------------------------------------------------------------------------
+# RedactGuard - https://github.com/riteshambastha/redactguard
+# Author: Ritesh Ambastha
+# ---------------------------------------------------------------------------
