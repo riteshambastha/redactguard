@@ -24,12 +24,18 @@ dependencies = [
     "Pillow>=10.0",
     "pydub>=0.25",
     "pytesseract>=0.3.10",
+    "opencv-python-headless>=4.9,<5",  # 5.x dropped cv2.CascadeClassifier entirely - see ADR-0006
+    "numpy>=1.26",
+    "faster-whisper>=1.0",
 ]
 # System dependencies (not pip-installable): ffmpeg (ingest.py), tesseract-ocr
 # (pytesseract - detectors/text/ocr_detector.py). See docker/Dockerfile.
 
 [tool.setuptools.packages.find]
 include = ["redactguard_core*"]
+
+[tool.setuptools.package-data]
+redactguard_core = ["detectors/face/models/*.xml"]
 
 # ---------------------------------------------------------------------------
 # RedactGuard - https://github.com/riteshambastha/redactguard

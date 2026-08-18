@@ -10,19 +10,19 @@ version: 1
 name: "walking_skeleton_dev"
 description: >
   Development-only policy for the walking-skeleton phase (see the
-  build-plan log). Only "text" is enabled, since face/audio detectors
-  don't exist yet and would raise NotImplementedError. agreement_threshold
-  is 1 because only a single OCR detector is implemented so far - real
-  ensemble voting (docs/adr/0001) needs a second, independent text
-  detector before this can move to the default threshold of 2.
+  build-plan log). All three PII types now have exactly one detector each
+  (Haar-cascade face, Tesseract OCR text, faster-whisper audio).
+  agreement_threshold is 1 because none of them have a second, independent
+  detector yet - real ensemble voting (docs/adr/0001) needs that before
+  this moves to the default threshold of 2.
 
 pii_types:
   face:
-    enabled: false
+    enabled: true
   text:
     enabled: true
   audio:
-    enabled: false
+    enabled: true
 
 agreement_threshold: 1
 

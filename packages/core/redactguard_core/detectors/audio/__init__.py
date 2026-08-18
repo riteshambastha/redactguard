@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-audio detectors (planned)
+audio detectors
 
 Part of RedactGuard - a self-hosted, privacy-preserving video PII redaction
 toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
@@ -21,8 +21,10 @@ toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
 Author: Ritesh Ambastha
 """
 
-# Built-in "audio" detector implementations land in the walking-skeleton
-# phase of the build plan - see docs/architecture.md.
+# Importing this subpackage runs the @register_detector("audio") decorator
+# in whisper_detector.py, below - see detectors/registry.py's
+# _discover_builtin_detectors() for where this import is triggered.
+from redactguard_core.detectors.audio.whisper_detector import WhisperAudioDetector  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
