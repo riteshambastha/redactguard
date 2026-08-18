@@ -23,15 +23,62 @@ Author: Ritesh Ambastha
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
+import tempfile
 
-def mux(video_path: str, audio_path: str, output_path: str) -> None:
-    """Remux a redacted video stream with a redacted audio stream into one
-    output file via ffmpeg.
+from redactguard_core.pipeline.ingest import Frame
 
-    TODO (walking-skeleton phase): implement as an ffmpeg subprocess call
-    once the demux() I/O approach (ingest.py) is decided.
+
+def encode_video_from_frames(frames: list[Frame], fps: float, output_path: str) -> None:
+    """Encode a sequence of redacted frames back into a video-only file
+    (no audio track) at `fps`, via ffmpeg's image2 demuxer.
+
+    `frames` is expected at the source's native frame rate (see
+    docs/adr/0007) - the walking-skeleton redaction path decodes at
+    native fps specifically so this re-encode doesn't itself downgrade
+    playback smoothness versus the source.
     """
-    raise NotImplementedError("mux() lands in the walking-skeleton phase")
+    if not frames:
+        raise ValueError("no frames to encode - source video had 0 decodable frames")
+    workdir = tempfile.mkdtemp(prefix="redactguard-encode-")
+    try:
+        for i, frame in enumerate(frames):
+            frame.image.save(os.path.join(workdir, f"frame_{i:08d}.png"))
+        pattern = os.path.join(workdir, "frame_%08d.png")
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-framerate", str(fps), "-i", pattern,
+                "-pix_fmt", "yuv420p", "-c:v", "libx264", output_path,
+            ],
+            capture_output=True, check=True,
+        )
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def mux(video_path: str, audio_path: str | None, output_path: str) -> None:
+    """Remux a redacted video-only stream with a redacted audio stream
+    into one output file via ffmpeg. If the source had no audio track at
+    all, `audio_path` is None and the video stream is carried straight
+    through (still re-containerized via ffmpeg, not a raw file copy, so
+    `output_path`'s container/codec is consistent either way).
+    """
+    if audio_path is None:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", video_path, "-c:v", "copy", output_path],
+            capture_output=True, check=True,
+        )
+        return
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", video_path, "-i", audio_path,
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-c:v", "copy", "-c:a", "aac", "-shortest", output_path,
+        ],
+        capture_output=True, check=True,
+    )
 
 
 # ---------------------------------------------------------------------------

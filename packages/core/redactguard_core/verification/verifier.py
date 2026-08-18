@@ -23,20 +23,36 @@ Author: Ritesh Ambastha
 
 from __future__ import annotations
 
-from redactguard_core.pipeline.manifest import RedactionManifest
+from redactguard_core.detectors.registry import run_detectors
+from redactguard_core.ensemble.voting import vote
+from redactguard_core.pipeline.ingest import DecodedMedia
+from redactguard_core.pipeline.manifest import PiiSpan
+from redactguard_core.pipeline.policy import PolicyProfile
 
 
 class Verifier:
     """Re-runs detection + voting on a redacted draft to confirm nothing
     was missed. See docs/adr/0002-mandatory-verify-then-retry-loop.md.
+
+    Deliberately takes an already-decoded `DecodedMedia` rather than a
+    file path: decoding the redacted draft is the orchestrator's job (it
+    already owns the temp-workspace lifecycle for the original source),
+    so this stays a pure, easily-unit-testable detect+vote call with no
+    file or subprocess I/O of its own.
     """
 
-    def verify(self, redacted_media_path: str) -> RedactionManifest:
-        """TODO (walking-skeleton phase): reuses the same detect+vote path
-        as Orchestrator.scan(), pointed at the redacted output instead of
-        the original file.
+    def verify(self, media: DecodedMedia, policy: PolicyProfile, agreement_threshold: int = 1) -> list[PiiSpan]:
+        """Detect PII in the (already redacted) `media` and vote.
+
+        `agreement_threshold` defaults to 1, not `policy.agreement_threshold`
+        - verification asks "does *any* detector still see PII here", not
+        "do detectors agree with each other", since post-redaction any
+        single hit is a sign the redaction missed something and warrants
+        a retry (ADR-0002). The initial detection pass on the *original*
+        media still uses the policy's real ensemble threshold.
         """
-        raise NotImplementedError("verify() lands once detectors exist")
+        results = run_detectors(media, policy)
+        return vote(results, agreement_threshold)
 
 
 # ---------------------------------------------------------------------------

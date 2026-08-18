@@ -24,8 +24,13 @@ Author: Ritesh Ambastha
 from __future__ import annotations
 
 from importlib.metadata import entry_points
+from typing import TYPE_CHECKING
 
-from redactguard_core.detectors.base import AbstractDetector
+from redactguard_core.detectors.base import AbstractDetector, DetectionResult
+
+if TYPE_CHECKING:
+    from redactguard_core.pipeline.ingest import DecodedMedia
+    from redactguard_core.pipeline.policy import PolicyProfile
 
 _REGISTRY: dict[str, list[type[AbstractDetector]]] = {}
 
@@ -65,6 +70,29 @@ def get_detectors(pii_type: str, policy=None) -> list[AbstractDetector]:
         for instance in instances:
             instance.configure(policy)
     return instances
+
+
+def run_detectors(media: DecodedMedia, policy: PolicyProfile) -> list[DetectionResult]:
+    """Run every enabled-per-policy PII type's detector set over `media`
+    and return the raw, pre-voting detections.
+
+    Shared by Orchestrator.scan() (against the original source) and
+    Verifier.verify() (against a redacted draft) - see docs/adr/0002 for
+    why both need to run the exact same detect path.
+    """
+    results: list[DetectionResult] = []
+    for pii_type, cfg in policy.pii_types.items():
+        if not cfg.enabled:
+            continue
+        detectors = get_detectors(pii_type, policy=policy)
+        if not detectors:
+            raise NotImplementedError(
+                f"No detector implementations registered yet for {pii_type!r} "
+                "- this lands in the walking-skeleton phase."
+            )
+        for detector in detectors:
+            results.extend(detector.detect(media))
+    return results
 
 
 def _discover_builtin_detectors() -> None:

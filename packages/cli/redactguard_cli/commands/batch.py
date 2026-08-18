@@ -23,8 +23,12 @@ Author: Ritesh Ambastha
 
 from __future__ import annotations
 
+import os
+
 import click
 from redactguard_core.pipeline.ingest import iter_input_paths
+from redactguard_core.pipeline.orchestrator import Orchestrator
+from redactguard_core.pipeline.policy import load_policy
 
 
 @click.command()
@@ -33,16 +37,34 @@ from redactguard_core.pipeline.ingest import iter_input_paths
 @click.option("--out-dir", "output_dir", required=True, help="Directory for redacted outputs + reports")
 def batch(input_dir: str, policy_path: str, output_dir: str):
     """Process every video under a folder/archive in one invocation,
-    aggregating per-file reports.
+    aggregating per-file reports. Each file gets its own Orchestrator.run()
+    (see docs/adr/0002) - one file's retry loop or failure never blocks the
+    rest of the batch; unresolved files are flagged in the summary for
+    human review rather than halting the run.
     """
     paths = list(iter_input_paths(input_dir))
     click.echo(f"Found {len(paths)} video file(s) under {input_dir}")
+    os.makedirs(output_dir, exist_ok=True)
+    policy = load_policy(policy_path)
+
+    unresolved_count = 0
     for path in paths:
-        click.echo(f"  - {path}")
-    raise NotImplementedError(
-        "Per-file batch execution lands once Orchestrator.run() is wired up "
-        "(walking-skeleton phase and beyond)."
-    )
+        base = os.path.splitext(os.path.basename(path))[0]
+        out_path = os.path.join(output_dir, f"{base}.redacted.mp4")
+        report_path = os.path.join(output_dir, f"{base}.report.md")
+        click.echo(f"  - {path} -> {out_path}")
+
+        report = Orchestrator(policy).run(path, out_path)
+        with open(report_path, "w") as f:
+            f.write(report.render_markdown())
+
+        if report.unresolved:
+            unresolved_count += 1
+            click.echo(click.style(f"    UNRESOLVED - see {report_path}", fg="red"))
+
+    click.echo(f"\nDone: {len(paths)} file(s), {unresolved_count} unresolved (see reports in {output_dir})")
+    if unresolved_count:
+        raise SystemExit(1)
 
 
 # ---------------------------------------------------------------------------

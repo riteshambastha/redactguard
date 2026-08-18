@@ -23,16 +23,24 @@ Author: Ritesh Ambastha
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 from datetime import datetime, timezone
 
-from redactguard_core.detectors.base import DetectionResult
-from redactguard_core.detectors.registry import get_detectors
+from pydub import AudioSegment
+
+from redactguard_core.detectors.registry import run_detectors
 from redactguard_core.ensemble.voting import vote
-from redactguard_core.pipeline.ingest import decode_media
+from redactguard_core.pipeline.ingest import decode_media, get_frame_rate, sample_frames
 from redactguard_core.pipeline.manifest import RedactionManifest
 from redactguard_core.pipeline.policy import PolicyProfile
-from redactguard_core.pipeline.report import AuditReport
+from redactguard_core.pipeline.report import AuditReport, VerificationPass
+from redactguard_core.redaction.audio import apply_audio_redactions
+from redactguard_core.redaction.muxer import encode_video_from_frames, mux
+from redactguard_core.redaction.visual import apply_visual_redactions
 from redactguard_core.verification.retry_controller import RetryController
+from redactguard_core.verification.verifier import Verifier
 
 
 class Orchestrator:
@@ -45,25 +53,15 @@ class Orchestrator:
         self.policy = policy
         self.sample_fps = sample_fps
         self.retry_controller = RetryController(policy.retry)
+        self.verifier = Verifier()
 
     def scan(self, source_file: str) -> RedactionManifest:
         """Dry-run: decode + detect + vote, no video modified. This is the
         CLI's `redactguard scan` output.
         """
         media = decode_media(source_file, fps=self.sample_fps)
-        all_results: list[DetectionResult] = []
-        for pii_type, cfg in self.policy.pii_types.items():
-            if not cfg.enabled:
-                continue
-            registered = get_detectors(pii_type, policy=self.policy)
-            if not registered:
-                raise NotImplementedError(
-                    f"No detector implementations registered yet for {pii_type!r} "
-                    "- this lands in the walking-skeleton phase."
-                )
-            for detector in registered:
-                all_results.extend(detector.detect(media))
-        spans = vote(all_results, self.policy.agreement_threshold)
+        results = run_detectors(media, self.policy)
+        spans = vote(results, self.policy.agreement_threshold)
         return RedactionManifest(
             source_file=source_file,
             policy_profile=self.policy.name,
@@ -72,14 +70,99 @@ class Orchestrator:
         )
 
     def run(self, source_file: str, output_file: str) -> AuditReport:
-        """Apply the (possibly human-edited) manifest, verify, retry, and
-        report. This is the CLI's `redactguard run`.
+        """Detect, redact, verify, retry-with-escalation, and report. This
+        is the CLI's `redactguard run` - see
+        docs/adr/0002-mandatory-verify-then-retry-loop.md for the overall
+        design and docs/adr/0007 for why redaction compositing happens at
+        the source's native frame rate rather than `sample_fps`.
 
-        TODO (later phases): wire in redaction/visual.py, redaction/audio.py,
-        redaction/muxer.py, and verification/verifier.py once the
-        walking-skeleton detectors exist.
+        Detection runs exactly once against the original source; each
+        retry only re-votes the same raw detections at a lower agreement
+        threshold and re-composites with a wider margin (RetryController),
+        rather than re-running the (expensive) detectors themselves. Only
+        the *verification* pass after each redaction attempt re-decodes
+        and re-detects - against the redacted draft, to confirm nothing
+        was missed.
+
+        Per ADR-0002, exhausting max_attempts never withholds output: the
+        best (final) redacted draft is still written, with `unresolved`
+        and `warnings` set on the returned AuditReport for human review.
         """
-        raise NotImplementedError("run() lands once redaction + verification are wired up")
+        detection_media = decode_media(source_file, fps=self.sample_fps)
+        raw_results = run_detectors(detection_media, self.policy)
+        half_window_s = 0.5 / self.sample_fps
+
+        native_fps = get_frame_rate(source_file)
+        native_workdir = tempfile.mkdtemp(prefix="redactguard-native-")
+        native_frames = sample_frames(source_file, native_workdir, fps=native_fps)
+
+        original_audio = None
+        if detection_media.audio_path:
+            original_audio = AudioSegment.from_wav(detection_media.audio_path)
+
+        workdir = tempfile.mkdtemp(prefix="redactguard-run-")
+        os.makedirs(os.path.dirname(os.path.abspath(output_file)) or ".", exist_ok=True)
+
+        verification_passes: list[VerificationPass] = []
+        attempt = 0
+        threshold = self.policy.agreement_threshold
+        margin_px = self.retry_controller.base_margin_px
+        last_draft_path: str | None = None
+        manifest: RedactionManifest | None = None
+
+        while True:
+            spans = vote(raw_results, threshold)
+            manifest = RedactionManifest(
+                source_file=source_file,
+                policy_profile=self.policy.name,
+                created_at=datetime.now(timezone.utc),
+                spans=spans,
+            )
+
+            visual_spans = [s for s in spans if s.bbox is not None]
+            audio_spans = [s for s in spans if s.pii_type == "audio"]
+
+            redacted_frames = apply_visual_redactions(native_frames, visual_spans, half_window_s, margin_px)
+            video_only_path = os.path.join(workdir, f"attempt{attempt}.video.mp4")
+            encode_video_from_frames(redacted_frames, native_fps, video_only_path)
+
+            redacted_audio_path = None
+            if original_audio is not None:
+                redacted_audio_path = os.path.join(workdir, f"attempt{attempt}.audio.wav")
+                apply_audio_redactions(original_audio, audio_spans).export(redacted_audio_path, format="wav")
+
+            draft_path = os.path.join(workdir, f"attempt{attempt}.draft.mp4")
+            mux(video_only_path, redacted_audio_path, draft_path)
+            last_draft_path = draft_path
+
+            verify_media = decode_media(draft_path, fps=self.sample_fps)
+            verify_spans = self.verifier.verify(verify_media, self.policy, agreement_threshold=1)
+            verification_passes.append(
+                VerificationPass(attempt=attempt, spans_still_flagged=len(verify_spans), escalated=attempt > 0)
+            )
+
+            if not verify_spans:
+                shutil.copyfile(last_draft_path, output_file)
+                return AuditReport(manifest=manifest, verification_passes=verification_passes, unresolved=False)
+
+            try:
+                escalated = self.retry_controller.escalate(attempt)
+            except RuntimeError:
+                shutil.copyfile(last_draft_path, output_file)
+                return AuditReport(
+                    manifest=manifest,
+                    verification_passes=verification_passes,
+                    unresolved=True,
+                    warnings=[
+                        (
+                            f"{len(verify_spans)} PII span(s) still flagged by the verifier after "
+                            f"{self.policy.retry.max_attempts} redaction attempt(s). Output was still "
+                            "written (RedactGuard never withholds output - see ADR-0002); route this "
+                            "file to human review before distributing it."
+                        )
+                    ],
+                )
+            threshold, margin_px, attempt = escalated.agreement_threshold, escalated.blur_margin_px, escalated.attempt
 
 
 # ---------------------------------------------------------------------------

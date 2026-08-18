@@ -80,6 +80,26 @@ def has_audio_stream(path: str) -> bool:
     return bool(json.loads(result.stdout).get("streams"))
 
 
+def get_frame_rate(path: str) -> float:
+    """ffprobe-based native frame rate lookup, used by the redaction
+    compositor (redaction/muxer.py via the orchestrator) to re-encode the
+    redacted output at the source's own frame rate rather than the lower
+    `sample_fps` detection runs at - see docs/adr/0007.
+    """
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=r_frame_rate", "-of", "json", path,
+        ],
+        capture_output=True, text=True, check=True,
+    )
+    streams = json.loads(result.stdout).get("streams")
+    if not streams:
+        raise RuntimeError(f"no video stream found in {path!r}")
+    num, _, den = streams[0]["r_frame_rate"].partition("/")
+    return float(num) / float(den or 1)
+
+
 def demux(path: str, workdir: str) -> str | None:
     """Extract the audio track of `path` to a 16kHz mono WAV under
     `workdir`, suitable for ASR. Returns None if the source has no audio
