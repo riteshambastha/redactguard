@@ -259,6 +259,7 @@ an accident:
 | [0011](docs/adr/0011-a-server-rendered-demo-webapp-over-core.md) | A server-rendered demo web app over core, not a JSON API + SPA |
 | [0012](docs/adr/0012-pipeline-progress-reporting.md) | Pipeline stage progress reporting via logging + an optional callback |
 | [0013](docs/adr/0013-clearer-policy-choices-and-webapp-visual-design.md) | Curated policy display copy and a webapp visual design pass |
+| [0014](docs/adr/0014-temp-directory-cleanup-and-clean-media-errors.md) | Clean up pipeline temp directories, and raise a clean error for unreadable media |
 
 ## Status
 

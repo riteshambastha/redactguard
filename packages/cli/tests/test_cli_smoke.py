@@ -22,6 +22,7 @@ Author: Ritesh Ambastha
 """
 
 import logging
+import os
 import subprocess
 
 from click.testing import CliRunner
@@ -82,6 +83,65 @@ def test_scan_quiet_suppresses_progress_output(tmp_path):
     assert result.exit_code == 0, result.output
     assert "detector ensemble" not in result.output
     assert "Wrote manifest to" in result.output  # the command's own summary line still prints
+
+
+def _make_corrupted_file(path: str) -> None:
+    with open(path, "wb") as f:
+        f.write(b"not a real video file, just some bytes")
+
+
+def test_scan_on_a_corrupted_file_prints_a_clean_error_not_a_traceback(tmp_path):
+    # See docs/adr/0014 - before this, a corrupted/unsupported input made
+    # it all the way to an unhandled subprocess.CalledProcessError and a
+    # raw Python traceback on stderr.
+    bad_source = str(tmp_path / "corrupted.mp4")
+    _make_corrupted_file(bad_source)
+
+    result = CliRunner().invoke(
+        cli, ["scan", bad_source, "--policy", "policies/walking_skeleton_dev.yaml"]
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "Error:" in result.output
+
+
+def test_run_on_a_corrupted_file_prints_a_clean_error_not_a_traceback(tmp_path):
+    bad_source = str(tmp_path / "corrupted.mp4")
+    _make_corrupted_file(bad_source)
+    output = str(tmp_path / "output.mp4")
+
+    result = CliRunner().invoke(
+        cli, ["run", bad_source, "--policy", "policies/walking_skeleton_dev.yaml", "--out", output]
+    )
+    assert result.exit_code != 0
+    assert "Traceback" not in result.output
+    assert "Error:" in result.output
+    assert not os.path.exists(output)
+
+
+def test_batch_processes_remaining_files_after_one_corrupted_file(tmp_path):
+    # The batch command's own docstring claims "one file's retry loop or
+    # failure never blocks the rest of the batch" - this pins that down
+    # with a real corrupted file sitting alongside a real valid one.
+    input_dir = tmp_path / "inputs"
+    input_dir.mkdir()
+    _make_corrupted_file(str(input_dir / "a_corrupted.mp4"))
+    _make_text_video(str(input_dir / "b_valid.mp4"))
+    output_dir = tmp_path / "outputs"
+
+    result = CliRunner().invoke(
+        cli,
+        ["batch", str(input_dir), "--policy", "policies/walking_skeleton_dev.yaml", "--out-dir", str(output_dir)],
+    )
+
+    assert "1 failed" in result.output
+    assert os.path.exists(output_dir / "a_corrupted.report.md")
+    assert "FAILED" in (output_dir / "a_corrupted.report.md").read_text()
+    # The valid file after the corrupted one must still have been processed.
+    assert os.path.exists(output_dir / "b_valid.redacted.mp4")
+    assert os.path.getsize(output_dir / "b_valid.redacted.mp4") > 0
+    assert os.path.exists(output_dir / "b_valid.report.md")
+    assert result.exit_code != 0  # a batch with any failure still signals non-zero
 
 
 # ---------------------------------------------------------------------------

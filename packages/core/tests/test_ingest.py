@@ -21,10 +21,18 @@ toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
 Author: Ritesh Ambastha
 """
 
+import os
 import subprocess
 
 import pytest
-from redactguard_core.pipeline.ingest import decode_media, demux, has_audio_stream, sample_frames
+from redactguard_core.pipeline.ingest import (
+    MediaDecodeError,
+    decode_media,
+    demux,
+    get_frame_rate,
+    has_audio_stream,
+    sample_frames,
+)
 
 
 def _make_silent_test_video(path: str, duration_s: int = 2) -> None:
@@ -90,6 +98,79 @@ def test_decode_media_bundles_frames_and_audio(tmp_path):
     assert media.source_file == video_path
     assert len(media.frames) >= 1
     assert media.audio_path is not None
+
+
+def test_decode_media_reports_its_own_workdir_for_the_caller_to_clean_up(tmp_path):
+    # See docs/adr/0014 - decode_media()'s temp workdir is only ever
+    # cleaned up by whoever calls it (Orchestrator); this field is how
+    # the caller finds out what to remove.
+    video_path = str(tmp_path / "with_tone.mp4")
+    _make_test_video_with_tone(video_path, duration_s=1)
+    media = decode_media(video_path, fps=1.0)
+    assert media.workdir is not None
+    assert os.path.isdir(media.workdir)
+    assert os.path.exists(media.audio_path)  # lives inside media.workdir
+
+
+def _make_corrupted_file(path: str) -> None:
+    """Not a real media file at all - ffmpeg/ffprobe reject this outright,
+    unlike a truncated-but-parseable video.
+    """
+    with open(path, "wb") as f:
+        f.write(b"this is not a video file, just some bytes\x00\x01\x02")
+
+
+def test_sample_frames_raises_media_decode_error_for_a_corrupted_file(tmp_path):
+    bad_path = str(tmp_path / "corrupted.mp4")
+    _make_corrupted_file(bad_path)
+
+    with pytest.raises(MediaDecodeError, match="corrupted.mp4"):
+        sample_frames(bad_path, str(tmp_path / "frames"))
+
+
+def test_demux_raises_media_decode_error_for_a_corrupted_file(tmp_path):
+    bad_path = str(tmp_path / "corrupted.mp4")
+    _make_corrupted_file(bad_path)
+
+    with pytest.raises(MediaDecodeError, match="corrupted.mp4"):
+        demux(bad_path, str(tmp_path / "audio_out"))
+
+
+def test_decode_media_raises_media_decode_error_for_a_corrupted_file_not_a_raw_traceback(tmp_path):
+    bad_path = str(tmp_path / "corrupted.mp4")
+    _make_corrupted_file(bad_path)
+
+    with pytest.raises(MediaDecodeError) as excinfo:
+        decode_media(bad_path)
+    # A subprocess.CalledProcessError's default message is just "returned
+    # non-zero exit status N" - this asserts we're surfacing ffmpeg's own
+    # explanation instead (e.g. "Invalid data found...").
+    assert "moov atom" in str(excinfo.value) or "Invalid data" in str(excinfo.value)
+
+
+def test_get_frame_rate_raises_media_decode_error_for_an_audio_only_file(tmp_path):
+    audio_only_path = str(tmp_path / "audio_only.mp4")
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", audio_only_path],
+        capture_output=True, check=True,
+    )
+
+    with pytest.raises(MediaDecodeError, match="no video stream"):
+        get_frame_rate(audio_only_path)
+
+
+def test_sample_frames_raises_media_decode_error_for_an_audio_only_file(tmp_path):
+    # ffmpeg's own error here ("Output file does not contain any stream")
+    # is exactly the kind of message MediaDecodeError should be surfacing,
+    # not swallowing.
+    audio_only_path = str(tmp_path / "audio_only.mp4")
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", audio_only_path],
+        capture_output=True, check=True,
+    )
+
+    with pytest.raises(MediaDecodeError):
+        sample_frames(audio_only_path, str(tmp_path / "frames"))
 
 
 # ---------------------------------------------------------------------------

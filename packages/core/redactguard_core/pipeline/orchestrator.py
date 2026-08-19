@@ -88,17 +88,27 @@ class Orchestrator:
         """
         self._report(f"Decoding {source_file} and sampling frames at {self.sample_fps} fps for detection")
         media = decode_media(source_file, fps=self.sample_fps)
-        self._report("Running the detector ensemble")
-        results = run_detectors(media, self.policy)
-        self._report(f"Voting on {len(results)} raw detection(s) at agreement_threshold={self.policy.agreement_threshold}")
-        spans = vote(results, self.policy.agreement_threshold)
-        self._report(f"Scan complete: {len(spans)} trusted PII span(s)")
-        return RedactionManifest(
-            source_file=source_file,
-            policy_profile=self.policy.name,
-            created_at=datetime.now(timezone.utc),
-            spans=spans,
-        )
+        try:
+            self._report("Running the detector ensemble")
+            results = run_detectors(media, self.policy)
+            self._report(
+                f"Voting on {len(results)} raw detection(s) at agreement_threshold={self.policy.agreement_threshold}"
+            )
+            spans = vote(results, self.policy.agreement_threshold)
+            self._report(f"Scan complete: {len(spans)} trusted PII span(s)")
+            return RedactionManifest(
+                source_file=source_file,
+                policy_profile=self.policy.name,
+                created_at=datetime.now(timezone.utc),
+                spans=spans,
+            )
+        finally:
+            # See docs/adr/0014 - decode_media()'s temp workdir (sampled
+            # frame PNGs + any demuxed audio.wav) is only cleaned up by its
+            # caller, never automatically; without this, every scan() call
+            # leaks one tempdir for the life of the process.
+            if media.workdir is not None:
+                shutil.rmtree(media.workdir, ignore_errors=True)
 
     def run(self, source_file: str, output_file: str) -> AuditReport:
         """Detect, redact, verify, retry-with-escalation, and report. This
@@ -121,99 +131,115 @@ class Orchestrator:
         """
         self._report(f"Decoding {source_file} and sampling frames at {self.sample_fps} fps for detection")
         detection_media = decode_media(source_file, fps=self.sample_fps)
-        self._report("Running the detector ensemble on the source video")
-        raw_results = run_detectors(detection_media, self.policy)
-        self._report(f"Detection complete: {len(raw_results)} raw detection(s) before voting")
-        half_window_s = 0.5 / self.sample_fps
+        # Every tempdir a decode_media()/mkdtemp() call creates during this
+        # run - the source detection pass, the native-fps redaction frames,
+        # the per-attempt scratch dir, and one more per verify-retry
+        # attempt - is collected here and removed in the `finally` below,
+        # on every exit path (clean finish, retries-exhausted finish, or an
+        # unhandled exception). Before this, none of them were ever cleaned
+        # up - see docs/adr/0014.
+        temp_workdirs: list[str] = [d for d in (detection_media.workdir,) if d is not None]
+        try:
+            self._report("Running the detector ensemble on the source video")
+            raw_results = run_detectors(detection_media, self.policy)
+            self._report(f"Detection complete: {len(raw_results)} raw detection(s) before voting")
+            half_window_s = 0.5 / self.sample_fps
 
-        native_fps = get_frame_rate(source_file)
-        self._report(f"Decoding {source_file} at its native {native_fps:.3g} fps for redaction compositing")
-        native_workdir = tempfile.mkdtemp(prefix="redactguard-native-")
-        native_frames = sample_frames(source_file, native_workdir, fps=native_fps)
+            native_fps = get_frame_rate(source_file)
+            self._report(f"Decoding {source_file} at its native {native_fps:.3g} fps for redaction compositing")
+            native_workdir = tempfile.mkdtemp(prefix="redactguard-native-")
+            temp_workdirs.append(native_workdir)
+            native_frames = sample_frames(source_file, native_workdir, fps=native_fps)
 
-        original_audio = None
-        if detection_media.audio_path:
-            original_audio = AudioSegment.from_wav(detection_media.audio_path)
+            original_audio = None
+            if detection_media.audio_path:
+                original_audio = AudioSegment.from_wav(detection_media.audio_path)
 
-        workdir = tempfile.mkdtemp(prefix="redactguard-run-")
-        os.makedirs(os.path.dirname(os.path.abspath(output_file)) or ".", exist_ok=True)
+            workdir = tempfile.mkdtemp(prefix="redactguard-run-")
+            temp_workdirs.append(workdir)
+            os.makedirs(os.path.dirname(os.path.abspath(output_file)) or ".", exist_ok=True)
 
-        verification_passes: list[VerificationPass] = []
-        attempt = 0
-        threshold = self.policy.agreement_threshold
-        margin_px = self.retry_controller.base_margin_px
-        last_draft_path: str | None = None
-        manifest: RedactionManifest | None = None
+            verification_passes: list[VerificationPass] = []
+            attempt = 0
+            threshold = self.policy.agreement_threshold
+            margin_px = self.retry_controller.base_margin_px
+            last_draft_path: str | None = None
+            manifest: RedactionManifest | None = None
 
-        while True:
-            spans = vote(raw_results, threshold)
-            self._report(
-                f"Attempt {attempt + 1}: voting at agreement_threshold={threshold} -> {len(spans)} trusted span(s)"
-            )
-            manifest = RedactionManifest(
-                source_file=source_file,
-                policy_profile=self.policy.name,
-                created_at=datetime.now(timezone.utc),
-                spans=spans,
-            )
-
-            visual_spans = [s for s in spans if s.bbox is not None]
-            audio_spans = [s for s in spans if s.pii_type == "audio"]
-
-            self._report(
-                f"Attempt {attempt + 1}: redacting {len(visual_spans)} visual span(s) and "
-                f"{len(audio_spans)} audio span(s) across {len(native_frames)} native-fps frame(s)"
-            )
-            redacted_frames = apply_visual_redactions(native_frames, visual_spans, half_window_s, margin_px)
-            video_only_path = os.path.join(workdir, f"attempt{attempt}.video.mp4")
-            encode_video_from_frames(redacted_frames, native_fps, video_only_path)
-
-            redacted_audio_path = None
-            if original_audio is not None:
-                redacted_audio_path = os.path.join(workdir, f"attempt{attempt}.audio.wav")
-                apply_audio_redactions(original_audio, audio_spans).export(redacted_audio_path, format="wav")
-
-            draft_path = os.path.join(workdir, f"attempt{attempt}.draft.mp4")
-            mux(video_only_path, redacted_audio_path, draft_path)
-            last_draft_path = draft_path
-
-            self._report(f"Attempt {attempt + 1}: re-scanning the redacted draft to verify nothing was missed")
-            verify_media = decode_media(draft_path, fps=self.sample_fps)
-            verify_spans = self.verifier.verify(verify_media, self.policy, agreement_threshold=1)
-            verification_passes.append(
-                VerificationPass(attempt=attempt, spans_still_flagged=len(verify_spans), escalated=attempt > 0)
-            )
-
-            if not verify_spans:
-                self._report(f"Attempt {attempt + 1}: verification clean - writing final output")
-                shutil.copyfile(last_draft_path, output_file)
-                return AuditReport(manifest=manifest, verification_passes=verification_passes, unresolved=False)
-
-            self._report(
-                f"Attempt {attempt + 1}: verifier still flagged {len(verify_spans)} span(s) - escalating"
-            )
-            try:
-                escalated = self.retry_controller.escalate(attempt)
-            except RuntimeError:
+            while True:
+                spans = vote(raw_results, threshold)
                 self._report(
-                    f"Retry attempts exhausted ({self.policy.retry.max_attempts}) - writing the best draft "
-                    "anyway and flagging it unresolved for human review"
+                    f"Attempt {attempt + 1}: voting at agreement_threshold={threshold} -> {len(spans)} trusted span(s)"
                 )
-                shutil.copyfile(last_draft_path, output_file)
-                return AuditReport(
-                    manifest=manifest,
-                    verification_passes=verification_passes,
-                    unresolved=True,
-                    warnings=[
-                        (
-                            f"{len(verify_spans)} PII span(s) still flagged by the verifier after "
-                            f"{self.policy.retry.max_attempts} redaction attempt(s). Output was still "
-                            "written (RedactGuard never withholds output - see ADR-0002); route this "
-                            "file to human review before distributing it."
-                        )
-                    ],
+                manifest = RedactionManifest(
+                    source_file=source_file,
+                    policy_profile=self.policy.name,
+                    created_at=datetime.now(timezone.utc),
+                    spans=spans,
                 )
-            threshold, margin_px, attempt = escalated.agreement_threshold, escalated.blur_margin_px, escalated.attempt
+
+                visual_spans = [s for s in spans if s.bbox is not None]
+                audio_spans = [s for s in spans if s.pii_type == "audio"]
+
+                self._report(
+                    f"Attempt {attempt + 1}: redacting {len(visual_spans)} visual span(s) and "
+                    f"{len(audio_spans)} audio span(s) across {len(native_frames)} native-fps frame(s)"
+                )
+                redacted_frames = apply_visual_redactions(native_frames, visual_spans, half_window_s, margin_px)
+                video_only_path = os.path.join(workdir, f"attempt{attempt}.video.mp4")
+                encode_video_from_frames(redacted_frames, native_fps, video_only_path)
+
+                redacted_audio_path = None
+                if original_audio is not None:
+                    redacted_audio_path = os.path.join(workdir, f"attempt{attempt}.audio.wav")
+                    apply_audio_redactions(original_audio, audio_spans).export(redacted_audio_path, format="wav")
+
+                draft_path = os.path.join(workdir, f"attempt{attempt}.draft.mp4")
+                mux(video_only_path, redacted_audio_path, draft_path)
+                last_draft_path = draft_path
+
+                self._report(f"Attempt {attempt + 1}: re-scanning the redacted draft to verify nothing was missed")
+                verify_media = decode_media(draft_path, fps=self.sample_fps)
+                if verify_media.workdir is not None:
+                    temp_workdirs.append(verify_media.workdir)
+                verify_spans = self.verifier.verify(verify_media, self.policy, agreement_threshold=1)
+                verification_passes.append(
+                    VerificationPass(attempt=attempt, spans_still_flagged=len(verify_spans), escalated=attempt > 0)
+                )
+
+                if not verify_spans:
+                    self._report(f"Attempt {attempt + 1}: verification clean - writing final output")
+                    shutil.copyfile(last_draft_path, output_file)
+                    return AuditReport(manifest=manifest, verification_passes=verification_passes, unresolved=False)
+
+                self._report(
+                    f"Attempt {attempt + 1}: verifier still flagged {len(verify_spans)} span(s) - escalating"
+                )
+                try:
+                    escalated = self.retry_controller.escalate(attempt)
+                except RuntimeError:
+                    self._report(
+                        f"Retry attempts exhausted ({self.policy.retry.max_attempts}) - writing the best draft "
+                        "anyway and flagging it unresolved for human review"
+                    )
+                    shutil.copyfile(last_draft_path, output_file)
+                    return AuditReport(
+                        manifest=manifest,
+                        verification_passes=verification_passes,
+                        unresolved=True,
+                        warnings=[
+                            (
+                                f"{len(verify_spans)} PII span(s) still flagged by the verifier after "
+                                f"{self.policy.retry.max_attempts} redaction attempt(s). Output was still "
+                                "written (RedactGuard never withholds output - see ADR-0002); route this "
+                                "file to human review before distributing it."
+                            )
+                        ],
+                    )
+                threshold, margin_px, attempt = escalated.agreement_threshold, escalated.blur_margin_px, escalated.attempt
+        finally:
+            for d in temp_workdirs:
+                shutil.rmtree(d, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------

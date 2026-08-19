@@ -24,6 +24,7 @@ Author: Ritesh Ambastha
 from __future__ import annotations
 
 import click
+from redactguard_core.pipeline.ingest import MediaDecodeError
 from redactguard_core.pipeline.orchestrator import Orchestrator
 from redactguard_core.pipeline.policy import load_policy
 
@@ -38,7 +39,14 @@ def run(input_path: str, policy_path: str, output_path: str):
     """
     policy = load_policy(policy_path)
     orchestrator = Orchestrator(policy)
-    report = orchestrator.run(input_path, output_path)
+    try:
+        report = orchestrator.run(input_path, output_path)
+    except MediaDecodeError as exc:
+        # A corrupted/empty/unsupported input file otherwise surfaces as a
+        # raw ffmpeg subprocess traceback - see docs/adr/0014. ClickException
+        # prints "Error: ..." to stderr and exits 1, same as any other
+        # click-level usage error.
+        raise click.ClickException(str(exc)) from exc
     if report.unresolved:
         click.echo(click.style("UNRESOLVED - see audit report for human review", fg="red", bold=True))
     click.echo(report.render_markdown())

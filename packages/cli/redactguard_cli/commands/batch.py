@@ -48,13 +48,24 @@ def batch(input_dir: str, policy_path: str, output_dir: str):
     policy = load_policy(policy_path)
 
     unresolved_count = 0
+    failed_count = 0
     for path in paths:
         base = os.path.splitext(os.path.basename(path))[0]
         out_path = os.path.join(output_dir, f"{base}.redacted.mp4")
         report_path = os.path.join(output_dir, f"{base}.report.md")
         click.echo(f"  - {path} -> {out_path}")
 
-        report = Orchestrator(policy).run(path, out_path)
+        try:
+            report = Orchestrator(policy).run(path, out_path)
+        except Exception as exc:  # noqa: BLE001 - intentionally blind: one corrupted/
+            # unreadable file in a folder must not abort every other file's
+            # redaction, per this command's own docstring - see docs/adr/0014.
+            failed_count += 1
+            with open(report_path, "w") as f:
+                f.write(f"# {base} - FAILED\n\n{exc}\n")
+            click.echo(click.style(f"    FAILED - {exc}", fg="red"))
+            continue
+
         with open(report_path, "w") as f:
             f.write(report.render_markdown())
 
@@ -62,8 +73,11 @@ def batch(input_dir: str, policy_path: str, output_dir: str):
             unresolved_count += 1
             click.echo(click.style(f"    UNRESOLVED - see {report_path}", fg="red"))
 
-    click.echo(f"\nDone: {len(paths)} file(s), {unresolved_count} unresolved (see reports in {output_dir})")
-    if unresolved_count:
+    click.echo(
+        f"\nDone: {len(paths)} file(s), {unresolved_count} unresolved, "
+        f"{failed_count} failed (see reports in {output_dir})"
+    )
+    if unresolved_count or failed_count:
         raise SystemExit(1)
 
 

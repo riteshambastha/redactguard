@@ -56,6 +56,53 @@ def test_run_job_sync_records_failure_instead_of_raising(settings, tmp_path):
     assert job["error_message"]
 
 
+def test_run_job_sync_stores_a_clean_message_for_a_corrupted_upload_not_a_traceback(settings, tmp_path):
+    # See docs/adr/0014 - the job detail page renders error_message
+    # verbatim in a <pre> block, so a raw Python traceback there is a poor
+    # (and slightly leaky) experience for what's just a bad upload.
+    init_db(settings.db_path)
+    user_id = auth.create_user(settings.db_path, "a@example.com", "password123")
+    bad_input = tmp_path / "corrupted.mp4"
+    bad_input.write_bytes(b"not a real video file")
+    job_id = jobs.create_job(
+        settings.db_path, user_id=user_id, original_filename="corrupted.mp4", policy_name="demo_fast",
+        input_path=str(bad_input), output_path=str(tmp_path / "out.mp4"),
+    )
+
+    jobs.run_job_sync(settings.db_path, job_id, policy_path=_demo_fast_policy_path(), sample_fps=1.0)
+
+    job = jobs.get_job(settings.db_path, job_id)
+    assert job["status"] == "failed"
+    assert "Traceback" not in job["error_message"]
+    assert "could not process" in job["error_message"]
+
+
+def test_run_job_sync_stores_a_generic_message_for_an_unexpected_error(settings, tmp_path, monkeypatch):
+    # An error that ISN'T a known/expected MediaDecodeError (a bug inside a
+    # detector, say) shouldn't dump its internals onto the job detail page
+    # an uploader can read - full detail goes to the server log instead
+    # (see jobs.run_job_sync's logger.exception call), and the job row gets
+    # a generic message pointing there.
+    init_db(settings.db_path)
+    user_id = auth.create_user(settings.db_path, "a@example.com", "password123")
+    job_id = jobs.create_job(
+        settings.db_path, user_id=user_id, original_filename="a.mp4", policy_name="demo_fast",
+        input_path=str(tmp_path / "input.mp4"), output_path=str(tmp_path / "out.mp4"),
+    )
+
+    def _boom(self, *_args, **_kwargs):
+        raise ValueError("some internal detail nobody uploading a video should see")
+
+    monkeypatch.setattr("redactguard_core.pipeline.orchestrator.Orchestrator.run", _boom)
+
+    jobs.run_job_sync(settings.db_path, job_id, policy_path=_demo_fast_policy_path(), sample_fps=1.0)
+
+    job = jobs.get_job(settings.db_path, job_id)
+    assert job["status"] == "failed"
+    assert "some internal detail" not in job["error_message"]
+    assert "unexpected internal error" in job["error_message"].lower()
+
+
 def _demo_fast_policy_path() -> str:
     from redactguard_webapp.policy_catalog import POLICIES_DIR, find_policy
 

@@ -22,12 +22,24 @@ toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
 Author: Ritesh Ambastha
 """
 
+import glob
 import os
 import subprocess
+import tempfile
 
-from redactguard_core.pipeline.ingest import has_audio_stream
+import pytest
+from redactguard_core.pipeline.ingest import MediaDecodeError, has_audio_stream
 from redactguard_core.pipeline.orchestrator import Orchestrator
 from redactguard_core.pipeline.policy import PiiTypeConfig, PolicyProfile, RetryConfig
+
+
+def _redactguard_tempdirs() -> set[str]:
+    """Every tempdir the pipeline itself creates is prefixed
+    "redactguard-" (ingest.decode_media, and Orchestrator.run()'s own
+    native-frames/attempt-scratch dirs) - see docs/adr/0014. Used to
+    assert none are left behind after a run.
+    """
+    return set(glob.glob(os.path.join(tempfile.gettempdir(), "redactguard-*")))
 
 # agreement_threshold=2 mirrors the real profiles (policies/gdpr_v1.yaml
 # etc.) now that text has two independent detectors (Tesseract OCR + MSER
@@ -156,6 +168,52 @@ def test_scan_also_reports_progress(tmp_path):
     Orchestrator(_POLICY, sample_fps=2.0, on_progress=messages.append).scan(source)
 
     assert any("Scan complete" in m for m in messages)
+
+
+def test_run_leaves_no_temp_directories_behind_on_success(tmp_path):
+    # See docs/adr/0014 - before this, every run() call (the source
+    # decode, the native-fps redaction frames, the per-attempt scratch
+    # dir, and one more per verify-retry attempt) leaked a tempdir for
+    # the life of the process.
+    source = str(tmp_path / "source.mp4")
+    _make_text_video(source)
+    output = str(tmp_path / "output.mp4")
+
+    before = _redactguard_tempdirs()
+    Orchestrator(_POLICY, sample_fps=2.0).run(source, output)
+    after = _redactguard_tempdirs()
+
+    assert after == before, f"run() leaked tempdir(s): {after - before}"
+
+
+def test_scan_leaves_no_temp_directories_behind(tmp_path):
+    source = str(tmp_path / "source.mp4")
+    _make_text_video(source)
+
+    before = _redactguard_tempdirs()
+    Orchestrator(_POLICY, sample_fps=2.0).scan(source)
+    after = _redactguard_tempdirs()
+
+    assert after == before, f"scan() leaked tempdir(s): {after - before}"
+
+
+def test_run_leaves_no_temp_directories_behind_even_when_it_raises(tmp_path):
+    # A corrupted source fails inside decode_media() partway through
+    # run() - the tempdirs created before the failure (the source
+    # decode's own workdir, in this case) must still be cleaned up by the
+    # `finally` in Orchestrator.run(), not just on the success path.
+    bad_source = str(tmp_path / "corrupted.mp4")
+    with open(bad_source, "wb") as f:
+        f.write(b"not a real video file")
+    output = str(tmp_path / "output.mp4")
+
+    before = _redactguard_tempdirs()
+    with pytest.raises(MediaDecodeError):
+        Orchestrator(_POLICY, sample_fps=2.0).run(bad_source, output)
+    after = _redactguard_tempdirs()
+
+    assert after == before, f"run() leaked tempdir(s) on its failure path: {after - before}"
+    assert not os.path.exists(output)
 
 
 # ---------------------------------------------------------------------------

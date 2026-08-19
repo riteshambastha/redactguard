@@ -24,6 +24,7 @@ Author: Ritesh Ambastha
 from __future__ import annotations
 
 import click
+from redactguard_core.pipeline.ingest import MediaDecodeError
 from redactguard_core.pipeline.orchestrator import Orchestrator
 from redactguard_core.pipeline.policy import load_policy
 
@@ -36,7 +37,11 @@ def scan(input_path: str, policy_path: str, manifest_out: str | None):
     """Dry-run: detect PII and write a manifest. No video is modified."""
     policy = load_policy(policy_path)
     orchestrator = Orchestrator(policy)
-    manifest = orchestrator.scan(input_path)
+    try:
+        manifest = orchestrator.scan(input_path)
+    except MediaDecodeError as exc:
+        # See docs/adr/0014 - same rationale as `run`'s ClickException.
+        raise click.ClickException(str(exc)) from exc
     out_path = manifest_out or f"{input_path}.manifest.json"
     manifest.to_json(out_path)
     click.echo(f"Wrote manifest to {out_path} ({len(manifest.spans)} spans)")

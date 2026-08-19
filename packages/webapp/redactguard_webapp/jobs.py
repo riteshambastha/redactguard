@@ -32,15 +32,18 @@ against the "runs entirely offline with nothing else to stand up" pitch.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
-import traceback
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
+from redactguard_core.pipeline.ingest import MediaDecodeError
 from redactguard_core.pipeline.orchestrator import Orchestrator
 from redactguard_core.pipeline.policy import load_policy
 
 from redactguard_webapp.db import get_connection
+
+logger = logging.getLogger(__name__)
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="redactguard-job")
 
@@ -132,11 +135,29 @@ def run_job_sync(db_path: str, job_id: int, policy_path: str, sample_fps: float)
             unresolved=int(report.unresolved),
             report_markdown=report.render_markdown(),
         )
-    except Exception:  # noqa: BLE001 - intentionally blind: any detector/orchestrator failure
-        # must land as a failed job row, never crash the worker thread or take
-        # down other users' jobs sharing the same ThreadPoolExecutor.
+    except MediaDecodeError as exc:
+        # A corrupted/empty/unsupported upload - str(exc) is written for
+        # exactly this purpose (see docs/adr/0014) and is safe to show the
+        # uploader directly, unlike a raw traceback.
         _append_progress(db_path, job_id, "Job failed - see error details below")
-        _update_job(db_path, job_id, status="failed", error_message=traceback.format_exc(limit=5))
+        _update_job(db_path, job_id, status="failed", error_message=str(exc))
+    except Exception:
+        # failure must land as a failed job row, never crash the worker thread or
+        # take down other users' jobs sharing the same ThreadPoolExecutor. Unlike
+        # MediaDecodeError, this is an unexpected/internal failure, so the full
+        # traceback goes to the server log (for the operator to debug) rather than
+        # to the job row an uploader can read on the job detail page.
+        logger.exception("Unexpected error running job %s", job_id)
+        _append_progress(db_path, job_id, "Job failed - see error details below")
+        _update_job(
+            db_path,
+            job_id,
+            status="failed",
+            error_message=(
+                "An unexpected internal error occurred while processing this video. "
+                "Check the server log for details."
+            ),
+        )
 
 
 def _append_progress(db_path: str, job_id: int, message: str) -> None:
