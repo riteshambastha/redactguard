@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import glob
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from redactguard_core.pipeline.policy import PolicyProfile, load_policy
 
@@ -45,6 +45,77 @@ POLICIES_DIR = os.path.join(os.path.dirname(__file__), "policies")
 class PolicyChoice:
     path: str
     profile: PolicyProfile
+
+
+@dataclass
+class PolicyDisplay:
+    """Upload-form-only presentation for a policy - internal names like
+    "demo_fast" are fine as the HTML form value and for filenames/logs,
+    but meant nothing to a first-time visitor deciding what to pick (this
+    was reported directly by a user looking at the upload page). Kept
+    separate from `PolicyProfile` in redactguard-core rather than adding
+    a `display_name` field there - this is presentation for one consumer
+    of the pipeline, not a property of the policy itself, and a real
+    compliance profile like gdpr_v1.yaml has no need for webapp copy.
+    """
+
+    title: str
+    tagline: str
+    badge_text: str
+    badge_kind: str  # "offline" | "online" - selects the badge's CSS color
+    details: list[str] = field(default_factory=list)
+
+
+# Keyed by PolicyProfile.name. Anything not listed here (a custom policy
+# someone drops into redactguard_webapp/policies/) still works - see
+# `display_for()` below - it just falls back to the profile's own name
+# and description rather than this curated copy.
+_DISPLAY_INFO: dict[str, PolicyDisplay] = {
+    "demo_fast": PolicyDisplay(
+        title="Fast demo",
+        tagline="Face + on-screen text, no downloads",
+        badge_text="Works offline",
+        badge_kind="offline",
+        details=[
+            "Detects faces and on-screen text (documents, screens, license plates)",
+            "Every detector runs locally - no model downloads, no internet needed",
+            "Best default if you just want to see RedactGuard work",
+        ],
+    ),
+    "demo_with_audio": PolicyDisplay(
+        title="Full demo, with audio",
+        tagline="Adds spoken-PII detection in the audio track",
+        badge_text="Downloads a model on first use",
+        badge_kind="online",
+        details=[
+            "Everything in Fast demo, plus a real speech-to-text pass (faster-whisper)",
+            (
+                "Downloads Whisper model weights (~150MB) from Hugging Face Hub the first "
+                "time this policy runs - needs internet access that one time, then it's cached"
+            ),
+            "Pick this if your video has spoken PII you want caught too",
+        ],
+    ),
+}
+
+
+def display_for(choice: PolicyChoice) -> PolicyDisplay:
+    """The curated `PolicyDisplay` for a known demo policy, or a plain
+    fallback built from the policy's own name/description for anything
+    else - so a custom policy dropped into
+    redactguard_webapp/policies/ renders reasonably without needing an
+    entry here.
+    """
+    known = _DISPLAY_INFO.get(choice.profile.name)
+    if known is not None:
+        return known
+    return PolicyDisplay(
+        title=choice.profile.name.replace("_", " ").title(),
+        tagline=choice.profile.description.strip() or "Custom policy",
+        badge_text="Custom policy",
+        badge_kind="offline",
+        details=[],
+    )
 
 
 def discover_policies(policies_dir: str = POLICIES_DIR) -> list[PolicyChoice]:

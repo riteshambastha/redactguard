@@ -3,7 +3,10 @@
 {% block title %}Dashboard - RedactGuard{% endblock %}
 {% block content %}
 <div class="card">
-  <h2>Your jobs</h2>
+  <div class="dashboard-heading">
+    <h2>Your jobs</h2>
+    <a href="/upload" class="btn-link">Upload a video</a>
+  </div>
   {% if jobs %}
   <table>
     <thead><tr><th>File</th><th>Policy</th><th>Status</th><th>Spans</th><th>Created</th><th></th></tr></thead>
@@ -12,7 +15,7 @@
       <tr>
         <td>{{ job["original_filename"] }}</td>
         <td>{{ job["policy_name"] }}</td>
-        <td class="status-{{ job['status'] }}">{{ job["status"] }}{% if job["unresolved"] %} (unresolved){% endif %}</td>
+        <td><span class="status-{{ job['status'] }}">{{ job["status"] }}</span>{% if job["unresolved"] %} <span class="muted">(unresolved)</span>{% endif %}</td>
         <td>{{ job["spans_detected"] if job["spans_detected"] is not none else "—" }}</td>
         <td class="muted">{{ job["created_at"] }}</td>
         <td><a href="/jobs/{{ job['id'] }}">View</a></td>
@@ -21,8 +24,7 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted">No jobs yet.</p>
+  <p class="muted">No jobs yet - <a href="/upload">upload a video</a> to see RedactGuard run.</p>
   {% endif %}
-  <p><a href="/upload">Upload a video &rarr;</a></p>
 </div>
 {% endblock %}

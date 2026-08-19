@@ -4,21 +4,36 @@
 {% block content %}
 <div class="card">
   <h2>Upload a video</h2>
+  <p class="muted">RedactGuard will detect and redact PII, verify its own
+    work, and retry with escalated settings if anything's still flagged -
+    see the <a href="https://github.com/riteshambastha/redactguard#how-it-works">pipeline overview</a>.</p>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <form method="post" action="/upload" enctype="multipart/form-data">
     <label for="video">Video file</label>
     <input id="video" type="file" name="video" accept="video/*" required>
-    <label for="policy_name">Policy profile</label>
-    <select id="policy_name" name="policy_name">
+
+    <label>Policy profile</label>
+    <div class="policy-picker">
       {% for choice in policies %}
-        <option value="{{ choice.profile.name }}">{{ choice.profile.name }}</option>
+        {% set display = policy_display[choice.profile.name] %}
+        <label class="policy-card">
+          <input type="radio" name="policy_name" value="{{ choice.profile.name }}" {% if loop.first %}checked{% endif %}>
+          <span class="policy-card-body">
+            <span class="policy-card-heading">
+              <span class="policy-card-title">{{ display.title }}</span>
+              <span class="badge badge-{{ display.badge_kind }}">{{ display.badge_text }}</span>
+            </span>
+            <span class="policy-card-tagline">{{ display.tagline }}</span>
+            {% if display.details %}
+              <ul class="policy-card-details">
+                {% for point in display.details %}<li>{{ point }}</li>{% endfor %}
+              </ul>
+            {% endif %}
+          </span>
+        </label>
       {% endfor %}
-    </select>
-    <p class="muted">
-      {% for choice in policies %}
-        <strong>{{ choice.profile.name }}</strong>: {{ choice.profile.description }}<br>
-      {% endfor %}
-    </p>
+    </div>
+
     <button type="submit">Run RedactGuard</button>
   </form>
 </div>

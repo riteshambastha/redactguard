@@ -21,7 +21,12 @@ toolkit with ensemble detection and a closed-loop verify-then-retry guardrail.
 Author: Ritesh Ambastha
 """
 
-from redactguard_webapp.policy_catalog import discover_policies, find_policy
+from redactguard_webapp.policy_catalog import (
+    PolicyChoice,
+    discover_policies,
+    display_for,
+    find_policy,
+)
 
 
 def test_discover_policies_finds_both_bundled_demo_profiles():
@@ -53,6 +58,32 @@ def find_policy_or_fail(name):
     choice = find_policy(POLICIES_DIR, name)
     assert choice is not None, f"expected bundled policy {name!r} to exist"
     return choice
+
+
+def test_display_for_demo_fast_flags_it_as_working_offline():
+    choice = find_policy_or_fail("demo_fast")
+    display = display_for(choice)
+    assert display.badge_kind == "offline"
+    assert "offline" in display.badge_text.lower()
+    assert display.details, "expected curated detail bullets for demo_fast"
+
+
+def test_display_for_demo_with_audio_flags_the_model_download():
+    choice = find_policy_or_fail("demo_with_audio")
+    display = display_for(choice)
+    assert display.badge_kind == "online"
+    assert "hugging face" in " ".join(display.details).lower()
+
+
+def test_display_for_falls_back_to_a_generated_display_for_unknown_policies():
+    choice = find_policy_or_fail("demo_fast")
+    custom = PolicyChoice(path=choice.path, profile=choice.profile)
+    custom.profile.name = "custom_policy"
+    custom.profile.description = "  A hand-rolled policy.  "
+    display = display_for(custom)
+    assert display.title == "Custom Policy"
+    assert display.tagline == "A hand-rolled policy."
+    assert display.details == []
 
 
 # ---------------------------------------------------------------------------

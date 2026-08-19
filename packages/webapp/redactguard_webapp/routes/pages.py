@@ -40,7 +40,12 @@ from starlette.concurrency import run_in_threadpool
 
 from redactguard_webapp import auth, jobs
 from redactguard_webapp.config import ALLOWED_UPLOAD_EXTENSIONS, Settings
-from redactguard_webapp.policy_catalog import POLICIES_DIR, discover_policies, find_policy
+from redactguard_webapp.policy_catalog import (
+    POLICIES_DIR,
+    discover_policies,
+    display_for,
+    find_policy,
+)
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
 
@@ -68,6 +73,17 @@ def build_router(settings: Settings) -> APIRouter:
     def render(request: Request, template: str, **context):
         context.setdefault("user", auth.current_user(request, settings))
         return templates.TemplateResponse(request, template, context)
+
+    def render_upload_form(request: Request, user, error: str | None = None):
+        choices = discover_policies()
+        return render(
+            request,
+            "upload.html",
+            user=user,
+            policies=choices,
+            policy_display={choice.profile.name: display_for(choice) for choice in choices},
+            error=error,
+        )
 
     @router.get("/")
     def index(request: Request):
@@ -131,7 +147,7 @@ def build_router(settings: Settings) -> APIRouter:
         user = auth.current_user(request, settings)
         if user is None:
             return RedirectResponse("/login", status_code=303)
-        return render(request, "upload.html", user=user, policies=discover_policies())
+        return render_upload_form(request, user)
 
     @router.post("/upload")
     async def upload_submit(request: Request, policy_name: str = Form(...), video: UploadFile | None = None):
@@ -141,32 +157,26 @@ def build_router(settings: Settings) -> APIRouter:
 
         policy_choice = find_policy(POLICIES_DIR, policy_name)
         if policy_choice is None:
-            return render(
-                request, "upload.html", user=user, policies=discover_policies(), error="Unknown policy profile."
-            )
+            return render_upload_form(request, user, error="Unknown policy profile.")
 
         if video is None or not video.filename:
-            return render(request, "upload.html", user=user, policies=discover_policies(), error="Choose a video file.")
+            return render_upload_form(request, user, error="Choose a video file.")
 
         safe_name = _sanitize_filename(video.filename)
         ext = os.path.splitext(safe_name)[1].lower()
         if ext not in ALLOWED_UPLOAD_EXTENSIONS:
-            return render(
+            return render_upload_form(
                 request,
-                "upload.html",
-                user=user,
-                policies=discover_policies(),
+                user,
                 error=f"Unsupported file type {ext!r}. Allowed: {', '.join(ALLOWED_UPLOAD_EXTENSIONS)}.",
             )
 
         contents = await video.read()
         max_bytes = settings.max_upload_mb * 1024 * 1024
         if len(contents) > max_bytes:
-            return render(
+            return render_upload_form(
                 request,
-                "upload.html",
-                user=user,
-                policies=discover_policies(),
+                user,
                 error=f"File is larger than the {settings.max_upload_mb} MB limit.",
             )
 
