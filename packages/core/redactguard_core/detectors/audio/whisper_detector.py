@@ -23,6 +23,7 @@ Author: Ritesh Ambastha
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from redactguard_core.detectors.base import AbstractDetector, DetectionResult
@@ -112,9 +113,9 @@ def match_transcript_words(words, custom_keywords: list[str], detector_name: str
 @register_detector("audio")
 class WhisperAudioDetector(AbstractDetector):
     """Transcribes the audio track with a self-hosted Whisper model
-    (faster-whisper, CPU int8 by default) and flags PII the same way the
-    OCR detector does for on-screen text - built-in regexes plus policy
-    custom_keywords, via `match_transcript_words()`.
+    (faster-whisper) and flags PII the same way the OCR detector does for
+    on-screen text - built-in regexes plus policy custom_keywords, via
+    `match_transcript_words()`.
 
     NOTE: this detector's actual transcription step needs the Whisper
     model weights, downloaded from Hugging Face Hub on first use and
@@ -125,6 +126,15 @@ class WhisperAudioDetector(AbstractDetector):
     fully tested against fabricated transcript data; only the
     faster-whisper integration itself needs verifying in an environment
     with normal internet access (e.g. Docker build, or your own machine).
+
+    Device/compute type are read from environment variables rather than
+    hardcoded, so `docker/Dockerfile.gpu` (or any GPU host) can actually
+    get GPU acceleration by setting `REDACTGUARD_WHISPER_DEVICE=cuda` -
+    previously this was hardcoded to `device="cpu"` unconditionally, which
+    meant the "optional GPU image" provided zero real speedup no matter
+    what it was run on (found by code review while auditing the Docker
+    setup - see docs/adr/0010). Defaults preserve the original CPU/int8
+    behavior when unset.
 
     Paired with EnergyVadDetector as the second, independent audio
     detector (docs/adr/0008) - real ensemble voting per docs/adr/0001
@@ -139,6 +149,10 @@ class WhisperAudioDetector(AbstractDetector):
     def __init__(self) -> None:
         self._custom_keywords: list[str] = []
         self._model = None
+        self.device = os.environ.get("REDACTGUARD_WHISPER_DEVICE", "cpu")
+        self.compute_type = os.environ.get(
+            "REDACTGUARD_WHISPER_COMPUTE_TYPE", "int8" if self.device == "cpu" else "float16"
+        )
 
     def configure(self, policy) -> None:
         self._custom_keywords = list(getattr(policy, "custom_keywords", []) or [])
@@ -149,7 +163,7 @@ class WhisperAudioDetector(AbstractDetector):
                 WhisperModel,  # imported lazily - heavy, and downloads weights
             )
 
-            self._model = WhisperModel(self.model_size, device="cpu", compute_type="int8")
+            self._model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
         return self._model
 
     def detect(self, media) -> list[DetectionResult]:

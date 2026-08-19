@@ -83,6 +83,30 @@ def test_detect_skips_model_entirely_when_no_audio_track():
     assert detector._model is None  # never lazily loaded - no download attempted
 
 
+def test_defaults_to_cpu_int8_when_no_env_vars_set(monkeypatch):
+    monkeypatch.delenv("REDACTGUARD_WHISPER_DEVICE", raising=False)
+    monkeypatch.delenv("REDACTGUARD_WHISPER_COMPUTE_TYPE", raising=False)
+    detector = WhisperAudioDetector()
+    assert detector.device == "cpu"
+    assert detector.compute_type == "int8"
+
+
+def test_device_and_compute_type_are_configurable_via_env_vars(monkeypatch):
+    # This is what docker/Dockerfile.gpu (or any GPU host) needs set to
+    # actually get GPU acceleration - see docs/adr/0010. Only tests the
+    # configuration wiring, not real CUDA inference (unverifiable in this
+    # sandbox - see the class docstring).
+    monkeypatch.setenv("REDACTGUARD_WHISPER_DEVICE", "cuda")
+    monkeypatch.delenv("REDACTGUARD_WHISPER_COMPUTE_TYPE", raising=False)
+    detector = WhisperAudioDetector()
+    assert detector.device == "cuda"
+    assert detector.compute_type == "float16"  # sensible default for GPU, not int8
+
+    monkeypatch.setenv("REDACTGUARD_WHISPER_COMPUTE_TYPE", "int8_float16")
+    detector2 = WhisperAudioDetector()
+    assert detector2.compute_type == "int8_float16"  # explicit override wins
+
+
 # ---------------------------------------------------------------------------
 # RedactGuard - https://github.com/riteshambastha/redactguard
 # Author: Ritesh Ambastha

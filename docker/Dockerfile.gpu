@@ -11,14 +11,38 @@ FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 # Optional GPU-accelerated build. CPU-first is the default target (see
 # docs/adr/ and the build-plan log) - this variant is an opt-in speedup,
 # not the primary supported path for v1.
+#
+# GPU acceleration only benefits WhisperAudioDetector (faster-whisper /
+# ctranslate2) - the classical-CV detectors (Haar/LBP cascades, MSER,
+# Tesseract) are CPU-bound OpenCV/tesseract operations regardless of this
+# image. Set REDACTGUARD_WHISPER_DEVICE=cuda (see docs/adr/0010 and
+# detectors/audio/whisper_detector.py) at `docker run` time to actually
+# use the GPU - without it, this image runs identically to the CPU one.
+#
+# ctranslate2 (faster-whisper's backend) needs cuDNN shared libraries at
+# runtime, which the plain `-runtime-` CUDA tag above does NOT include
+# (only the CUDA runtime itself, not cuDNN). This has not been build- or
+# run-verified in this repo's development sandbox, which cannot reach
+# any container registry to pull a base image at all (see docs/adr/0010)
+# - before relying on this image for real GPU inference, confirm the
+# cuDNN version ctranslate2 was built against and either switch to a
+# matching `*-cudnn*-runtime-*` NVIDIA base image tag or install the
+# matching libcudnn packages via apt yourself.
+#
+# `docker run --gpus all` (and the NVIDIA Container Toolkit on the host)
+# is also required for the container to see a GPU at all.
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-pip ffmpeg \
+        python3 python3-pip ffmpeg tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY packages/ packages/
+COPY policies/ policies/
 RUN pip install --no-cache-dir -e packages/core -e packages/cli -e packages/plugin-sdk
+
+RUN useradd --create-home --shell /usr/sbin/nologin redactguard
+USER redactguard
 
 ENTRYPOINT ["redactguard"]
 CMD ["--help"]
