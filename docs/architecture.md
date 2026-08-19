@@ -2,12 +2,18 @@
 
 # RedactGuard architecture
 
+> For rendered diagrams (pipeline flow, ensemble voting, and the plugin
+> architecture), see the [README](../README.md#how-it-works) - this file
+> stays as a plain-text-only companion for contexts that don't render
+> Mermaid.
+
 ## Pipeline flow
 
 ```
 input (file or folder)
     -> ingest        (ffmpeg/PyAV demux, frame sampling, batch/folder walk)
-    -> detect         (ensemble: 2-3 detectors per PII type: face / text / audio)
+    -> detect         (ensemble: 2 independent, differently-failing
+                        detectors per PII type: face / text / audio)
     -> vote           (agreement-threshold consensus -> trusted PII spans)
     -> [scan stops here: JSON manifest, no video modified]
     -> redact         (blur/pixelate video regions, mute/beep audio spans)
