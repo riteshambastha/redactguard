@@ -10,10 +10,11 @@
 
 install:
 	pip install -e packages/core -e packages/cli -e packages/plugin-sdk
+	pip install -e packages/plugin-sdk/examples/example_tattoo_detector_plugin
 	pip install -r requirements-dev.txt
 
 test:
-	pytest packages/core/tests packages/cli/tests -v
+	pytest packages/core/tests packages/cli/tests packages/plugin-sdk/examples/example_tattoo_detector_plugin/tests -v
 
 lint:
 	ruff check packages

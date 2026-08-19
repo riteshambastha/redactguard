@@ -1,0 +1,39 @@
+# example-redactguard-tattoo-plugin package metadata
+#
+# Part of RedactGuard - a self-hosted, privacy-preserving video PII
+# redaction toolkit with ensemble detection and a closed-loop
+# verify-then-retry guardrail.
+#
+# This is a WORKING EXAMPLE third-party plugin, kept in-repo for CI to
+# prove the entry_points-based plugin architecture actually works end to
+# end (docs/adr/0004, docs/adr/0009) - it is not part of the core
+# distribution and is not published anywhere.
+#
+# Author: Ritesh Ambastha
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "example-redactguard-tattoo-plugin"
+version = "0.1.0"
+description = "Example third-party RedactGuard detector plugin (tattoo, skin-tone/local-variance heuristic) - demonstrates the entry_points plugin API; not a production-quality detector"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Ritesh Ambastha", email = "ritesh.linux@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "redactguard-plugin-sdk",
+]
+
+[project.entry-points."redactguard.detectors"]
+example-tattoo-detector = "example_redactguard_tattoo:TattooDetector"
+
+[tool.setuptools.packages.find]
+include = ["example_redactguard_tattoo*"]
+
+# ---------------------------------------------------------------------------
+# RedactGuard - https://github.com/riteshambastha/redactguard
+# Author: Ritesh Ambastha
+# ---------------------------------------------------------------------------

@@ -27,13 +27,14 @@ jobs:
       - name: Install
         run: |
           pip install -e packages/core -e packages/cli -e packages/plugin-sdk
+          pip install -e packages/plugin-sdk/examples/example_tattoo_detector_plugin
           pip install -r requirements-dev.txt
       - name: Lint
         run: ruff check packages
       - name: Type check
         run: mypy packages/core/redactguard_core
       - name: Test
-        run: pytest packages/core/tests packages/cli/tests -v
+        run: pytest packages/core/tests packages/cli/tests packages/plugin-sdk/examples/example_tattoo_detector_plugin/tests -v
 
 # ---------------------------------------------------------------------------
 # RedactGuard - https://github.com/riteshambastha/redactguard
