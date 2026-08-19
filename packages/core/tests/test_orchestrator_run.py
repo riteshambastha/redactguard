@@ -116,6 +116,48 @@ def test_run_with_silent_source_produces_video_with_no_audio_stream(tmp_path):
     assert has_audio_stream(output) is False
 
 
+def test_run_reports_progress_through_on_progress_callback(tmp_path):
+    # See docs/adr/0012 - this is what lets a caller (e.g. redactguard-webapp)
+    # show live stage-by-stage progress instead of a static "running" label.
+    source = str(tmp_path / "source.mp4")
+    _make_text_video(source)
+    output = str(tmp_path / "output.mp4")
+
+    messages: list[str] = []
+    Orchestrator(_POLICY, sample_fps=2.0, on_progress=messages.append).run(source, output)
+
+    assert any("Decoding" in m for m in messages)
+    assert any("detector ensemble" in m for m in messages)
+    assert any("voting" in m for m in messages)
+    assert any("redacting" in m for m in messages)
+    assert any("verif" in m for m in messages)
+    # The final message for a run that resolves cleanly should say so.
+    assert any("verification clean" in m for m in messages)
+
+
+def test_run_reports_progress_via_logging_even_without_a_callback(tmp_path, caplog):
+    import logging
+
+    source = str(tmp_path / "source.mp4")
+    _make_text_video(source)
+    output = str(tmp_path / "output.mp4")
+
+    with caplog.at_level(logging.INFO, logger="redactguard_core.pipeline.orchestrator"):
+        Orchestrator(_POLICY, sample_fps=2.0).run(source, output)
+
+    assert any("Decoding" in record.message for record in caplog.records)
+
+
+def test_scan_also_reports_progress(tmp_path):
+    source = str(tmp_path / "source.mp4")
+    _make_text_video(source)
+
+    messages: list[str] = []
+    Orchestrator(_POLICY, sample_fps=2.0, on_progress=messages.append).scan(source)
+
+    assert any("Scan complete" in m for m in messages)
+
+
 # ---------------------------------------------------------------------------
 # RedactGuard - https://github.com/riteshambastha/redactguard
 # Author: Ritesh Ambastha

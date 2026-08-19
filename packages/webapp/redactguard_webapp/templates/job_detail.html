@@ -12,6 +12,13 @@
     {% if job["status"] in ("queued", "running") %}<span class="muted">(this page refreshes automatically)</span>{% endif %}
   </p>
 
+  {% if job["progress_log"] %}
+    <h3>Progress</h3>
+    <pre class="report progress-log" id="progress-log">{{ job["progress_log"] }}</pre>
+  {% elif job["status"] == "queued" %}
+    <p class="muted">Waiting for a worker slot to pick this job up...</p>
+  {% endif %}
+
   {% if job["status"] == "done" %}
     <p>Spans detected: {{ job["spans_detected"] }}</p>
     {% if job["unresolved"] %}
@@ -32,4 +39,11 @@
 
   <p><a href="/dashboard">&larr; Back to dashboard</a></p>
 </div>
+<script>
+  // The log grows with each stage the pipeline reports (see docs/adr/0012)
+  // - keep the newest lines in view rather than making people scroll down
+  // on every 3-second auto-refresh.
+  var log = document.getElementById("progress-log");
+  if (log) { log.scrollTop = log.scrollHeight; }
+</script>
 {% endblock %}

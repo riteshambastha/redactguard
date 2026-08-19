@@ -43,7 +43,11 @@ docker run --rm -p 8000:8000 -v redactguard_webapp_data:/data redactguard:webapp
    web server stays responsive) through the same
    `Orchestrator.run()` closed loop the CLI uses: detect → vote →
    redact → verify → retry-with-escalation → report. The job page
-   auto-refreshes until it's done.
+   auto-refreshes and shows a live, timestamped progress log of each
+   pipeline stage as it happens - see
+   [ADR-0012](../../docs/adr/0012-pipeline-progress-reporting.md) - so a
+   multi-minute job on a real video reads as "in progress," not just
+   an unchanging "running" label.
 4. **See the result.** Span count, whether it resolved cleanly or is
    flagged `unresolved` for human review (RedactGuard never silently
    withholds output - see

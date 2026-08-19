@@ -23,6 +23,8 @@ Author: Ritesh Ambastha
 
 from __future__ import annotations
 
+import logging
+
 from redactguard_webapp.app import create_app
 from redactguard_webapp.config import Settings
 
@@ -31,6 +33,14 @@ app = create_app()
 
 def main() -> None:
     import uvicorn
+
+    # Orchestrator reports every pipeline stage via logging.info() (see
+    # docs/adr/0012) - jobs run in background worker threads, so without a
+    # configured handler here, none of that reaches this terminal even
+    # though the job detail page shows it fine. Configured only in main()
+    # (the actual server entry point), not at module import time, so
+    # importing this module for tests doesn't change global logging config.
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(threadName)s] %(message)s")
 
     settings = Settings()
     print(f"RedactGuard webapp - data dir: {settings.data_dir}")

@@ -49,10 +49,22 @@ CREATE TABLE IF NOT EXISTS jobs (
     unresolved INTEGER,
     report_markdown TEXT,
     error_message TEXT,
+    progress_log TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 """
+
+# Columns added after the initial schema above. CREATE TABLE IF NOT EXISTS
+# is a no-op against an existing table, so a fresh column needs an
+# explicit, idempotent ALTER TABLE here instead - otherwise anyone with an
+# existing local redactguard_webapp.db (including jobs already mid-run)
+# would hit "no such column" on the next request rather than just picking
+# up the new column. See docs/adr/0012 - progress_log is what jobs.py
+# appends each pipeline-stage message to for the job detail page.
+_MIGRATIONS = (
+    ("jobs", "progress_log", "ALTER TABLE jobs ADD COLUMN progress_log TEXT NOT NULL DEFAULT ''"),
+)
 
 
 def get_connection(db_path: str) -> sqlite3.Connection:
@@ -71,6 +83,10 @@ def init_db(db_path: str) -> None:
     conn = get_connection(db_path)
     try:
         conn.executescript(SCHEMA)
+        for table, column, ddl in _MIGRATIONS:
+            existing_columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+            if column not in existing_columns:
+                conn.execute(ddl)
         conn.commit()
     finally:
         conn.close()

@@ -65,6 +65,10 @@ def test_upload_runs_the_real_pipeline_and_resolves_cleanly(signed_up_client, te
     assert "Spans detected: " in body
     # A visible burned-in SSN should be found by the text ensemble.
     assert "Spans detected: 0" not in body
+    # See docs/adr/0012 - the job detail page should show a real,
+    # timestamped stage-by-stage log, not just the final "done" status.
+    assert 'id="progress-log"' in body
+    assert "detector ensemble" in body
 
 
 def test_completed_job_download_serves_a_real_redacted_video_file(signed_up_client, text_pii_clip):

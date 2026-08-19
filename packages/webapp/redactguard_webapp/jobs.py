@@ -107,6 +107,12 @@ def run_job_sync(db_path: str, job_id: int, policy_path: str, sample_fps: float)
     raises - any exception is caught and recorded as a failed job, so a
     bad upload or a detector crash can't take down the worker thread
     silently.
+
+    Passes `on_progress=` so every pipeline-stage message Orchestrator
+    reports (see docs/adr/0012) is appended to the job's `progress_log`
+    as it happens - before this, a multi-minute job just showed
+    "running" on the job detail page with no way to tell it apart from
+    being stuck.
     """
     _update_job(db_path, job_id, status="running")
     row = get_job(db_path, job_id)
@@ -114,7 +120,10 @@ def run_job_sync(db_path: str, job_id: int, policy_path: str, sample_fps: float)
         return
     try:
         policy = load_policy(policy_path)
-        report = Orchestrator(policy, sample_fps=sample_fps).run(row["input_path"], row["output_path"])
+        orchestrator = Orchestrator(
+            policy, sample_fps=sample_fps, on_progress=lambda message: _append_progress(db_path, job_id, message)
+        )
+        report = orchestrator.run(row["input_path"], row["output_path"])
         _update_job(
             db_path,
             job_id,
@@ -126,7 +135,27 @@ def run_job_sync(db_path: str, job_id: int, policy_path: str, sample_fps: float)
     except Exception:  # noqa: BLE001 - intentionally blind: any detector/orchestrator failure
         # must land as a failed job row, never crash the worker thread or take
         # down other users' jobs sharing the same ThreadPoolExecutor.
+        _append_progress(db_path, job_id, "Job failed - see error details below")
         _update_job(db_path, job_id, status="failed", error_message=traceback.format_exc(limit=5))
+
+
+def _append_progress(db_path: str, job_id: int, message: str) -> None:
+    """Appends one timestamped line to the job's progress_log - a plain
+    UPDATE ... SET progress_log = progress_log || ? rather than routing
+    through `_update_job`, since this needs to append to the existing
+    value, not replace it.
+    """
+    line = f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')}] {message}\n"
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_connection(db_path)
+    try:
+        conn.execute(
+            "UPDATE jobs SET progress_log = progress_log || ?, updated_at = ? WHERE id = ?",
+            (line, now, job_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 _ALLOWED_UPDATE_FIELDS = {"status", "spans_detected", "unresolved", "report_markdown", "error_message", "updated_at"}
