@@ -1,0 +1,58 @@
+/* RedactGuard | Author: Ritesh Ambastha
+   Shared CSS custom properties (design tokens). Jinja2's include
+   directive pulls this file's contents into every page's own <style>
+   block - base.html (the signed-in app shell) and landing.html (the
+   marketing page) both need the same color palette and light/dark
+   behavior, and factoring it out here means the two can never drift
+   out of sync the way two independently-maintained copies eventually
+   would. This file is only ever included INSIDE a <style> tag, never
+   rendered as standalone HTML - hence CSS-style comments, not HTML
+   comments, which would be invalid once landed inside CSS. */
+:root {
+  color-scheme: light dark;
+  --color-bg: #f7f7fb;
+  --color-surface: #ffffff;
+  --color-border: rgba(15, 17, 26, 0.10);
+  --color-border-strong: rgba(15, 17, 26, 0.18);
+  --color-text: #14161f;
+  --color-text-muted: #666b7a;
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-primary-soft: rgba(79, 70, 229, 0.08);
+  --color-primary-ring: rgba(79, 70, 229, 0.18);
+  --color-success-text: #0f7a4d;
+  --color-success-bg: rgba(15, 122, 77, 0.12);
+  --color-info-text: #1d5fb4;
+  --color-info-bg: rgba(29, 95, 180, 0.12);
+  --color-warn-text: #9a6300;
+  --color-warn-bg: rgba(154, 99, 0, 0.14);
+  --color-danger-text: #b3261e;
+  --color-danger-bg: rgba(179, 38, 30, 0.10);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow-card: 0 1px 2px rgba(15, 17, 26, 0.04), 0 8px 24px -12px rgba(15, 17, 26, 0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f1115;
+    --color-surface: #171922;
+    --color-border: rgba(255, 255, 255, 0.10);
+    --color-border-strong: rgba(255, 255, 255, 0.20);
+    --color-text: #eceef3;
+    --color-text-muted: #9aa0b2;
+    --color-primary: #818cf8;
+    --color-primary-hover: #a5b0fb;
+    --color-primary-soft: rgba(129, 140, 248, 0.14);
+    --color-primary-ring: rgba(129, 140, 248, 0.28);
+    --color-success-text: #4ade80;
+    --color-success-bg: rgba(74, 222, 128, 0.14);
+    --color-info-text: #7dd3fc;
+    --color-info-bg: rgba(125, 211, 252, 0.14);
+    --color-warn-text: #fbbf24;
+    --color-warn-bg: rgba(251, 191, 36, 0.14);
+    --color-danger-text: #fca5a5;
+    --color-danger-bg: rgba(252, 165, 165, 0.14);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  }
+}
+/* RedactGuard - https://github.com/riteshambastha/redactguard | Author: Ritesh Ambastha */

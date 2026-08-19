@@ -87,9 +87,14 @@ def build_router(settings: Settings) -> APIRouter:
 
     @router.get("/")
     def index(request: Request):
+        # A signed-in visitor has no use for the marketing page - straight
+        # to their dashboard, same as before. An anonymous visitor now
+        # gets a real landing page (see docs/adr/0015) instead of being
+        # redirected straight to /login with no context on what they're
+        # signing in to.
         if auth.current_user(request, settings):
             return RedirectResponse("/dashboard", status_code=303)
-        return RedirectResponse("/login", status_code=303)
+        return templates.TemplateResponse(request, "landing.html", {})
 
     # --- signup / login / logout -------------------------------------
 

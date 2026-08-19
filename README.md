@@ -260,6 +260,7 @@ an accident:
 | [0012](docs/adr/0012-pipeline-progress-reporting.md) | Pipeline stage progress reporting via logging + an optional callback |
 | [0013](docs/adr/0013-clearer-policy-choices-and-webapp-visual-design.md) | Curated policy display copy and a webapp visual design pass |
 | [0014](docs/adr/0014-temp-directory-cleanup-and-clean-media-errors.md) | Clean up pipeline temp directories, and raise a clean error for unreadable media |
+| [0015](docs/adr/0015-marketing-landing-page-at-root.md) | A real marketing landing page at "/", not a redirect straight to /login |
 
 ## Status
 

@@ -22,10 +22,15 @@ Author: Ritesh Ambastha
 """
 
 
-def test_root_redirects_to_login_when_logged_out(client):
+def test_root_shows_the_landing_page_when_logged_out(client):
+    # See docs/adr/0015 - "/" used to redirect straight to /login with no
+    # context; an anonymous visitor now gets a real marketing landing page
+    # with Sign in / Get started CTAs instead.
     r = client.get("/", follow_redirects=False)
-    assert r.status_code == 303
-    assert r.headers["location"] == "/login"
+    assert r.status_code == 200
+    assert "Get started" in r.text
+    assert 'href="/signup"' in r.text
+    assert 'href="/login"' in r.text
 
 
 def test_dashboard_redirects_to_login_when_logged_out(client):
@@ -45,8 +50,10 @@ def test_signup_then_root_redirects_to_dashboard(client):
 def test_signup_rejects_short_password(client):
     r = client.post("/signup", data={"email": "a@b.com", "password": "short", "confirm_password": "short"})
     assert "at least 8 characters" in r.text
-    # And no session was created - still logged out.
-    assert client.get("/", follow_redirects=False).headers["location"] == "/login"
+    # And no session was created - still logged out, so a protected page
+    # still bounces to /login (the landing page itself no longer does,
+    # per test_root_shows_the_landing_page_when_logged_out above).
+    assert client.get("/dashboard", follow_redirects=False).headers["location"] == "/login"
 
 
 def test_signup_rejects_mismatched_confirmation(client):
