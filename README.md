@@ -149,9 +149,10 @@ redactguard/
 │   │       ├── redaction/       visual.py, audio.py, muxer.py
 │   │       └── verification/    verifier.py, retry_controller.py
 │   ├── cli/                     redactguard-cli  (scan | run | batch)
-│   └── plugin-sdk/              redactguard-plugin-sdk + example_tattoo_detector_plugin/
+│   ├── plugin-sdk/              redactguard-plugin-sdk + example_tattoo_detector_plugin/
+│   └── webapp/                  redactguard-webapp - signup/login/upload demo UI over core
 ├── policies/                     gdpr_v1.yaml, ccpa_v1.yaml, custom_template.yaml, ...
-├── docker/                       Dockerfile (CPU), Dockerfile.gpu, smoke_test.sh
+├── docker/                       Dockerfile (CPU), Dockerfile.gpu, Dockerfile.webapp, smoke_test.sh
 ├── docs/adr/                     one markdown file per non-obvious design decision
 ├── synthetic/                    synthetic test-clip generator (no real PII needed to test)
 └── benchmarks/                   benchmark harness
@@ -186,6 +187,30 @@ An optional `docker/Dockerfile.gpu` image exists for faster Whisper
 transcription on real workloads — see its own comments and
 [`docs/adr/0010`](docs/adr/0010-docker-image-hardening-and-gpu-device-wiring.md)
 for the `REDACTGUARD_WHISPER_DEVICE=cuda` env var and its cuDNN caveat.
+
+## Try it in a browser
+
+`packages/webapp` is a small, self-contained FastAPI app that puts a real
+UI in front of the pipeline: sign up, log in, upload a video, and watch
+detection → redaction → verification → retry run against it, with the
+audit report and a download link for the result:
+
+```bash
+pip install -e packages/core -e packages/webapp
+redactguard-webapp
+# -> http://127.0.0.1:8000
+```
+
+Or via Docker:
+
+```bash
+docker build -f docker/Dockerfile.webapp -t redactguard:webapp .
+docker run --rm -p 8000:8000 -v redactguard_data:/data redactguard:webapp
+```
+
+See [`packages/webapp/README.md`](packages/webapp/README.md) for
+configuration and its explicit security notes — it's a demo/reference
+app, not hardened for multi-tenant production use.
 
 ## Policy profiles
 
@@ -231,14 +256,18 @@ an accident:
 | [0008](docs/adr/0008-second-independent-detector-per-pii-type.md) | A second, differently-failing detector per PII type |
 | [0009](docs/adr/0009-validate-plugin-architecture-with-a-real-example-plugin.md) | Validating the plugin architecture with a real, installed example plugin |
 | [0010](docs/adr/0010-docker-image-hardening-and-gpu-device-wiring.md) | Docker image hardening and GPU device wiring |
+| [0011](docs/adr/0011-a-server-rendered-demo-webapp-over-core.md) | A server-rendered demo web app over core, not a JSON API + SPA |
 
 ## Status
 
 The core pipeline (ingest → detect → vote → redact → verify → retry →
 report) is implemented and covered end-to-end by tests, including a real
 two-detector ensemble per PII type and a real out-of-tree plugin. Docker
-images build for both CPU and an optional GPU-accelerated variant; CI
-builds and smoke-tests the CPU image on every push.
+images build for CPU, an optional GPU-accelerated variant, and the demo
+web app; CI builds and smoke-tests the CPU and webapp images on every
+push. The web app itself (signup, login, upload, background job
+processing, download) is tested end-to-end against the real pipeline,
+not a mocked one.
 
 Not yet production-hardened: detector accuracy is walking-skeleton-grade
 (Haar/LBP cascades and classical CV rather than trained deep models), and

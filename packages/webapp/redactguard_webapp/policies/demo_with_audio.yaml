@@ -1,0 +1,37 @@
+# Demo policy - face + text + audio
+#
+# Part of RedactGuard - a self-hosted, privacy-preserving video PII
+# redaction toolkit with ensemble detection and a closed-loop
+# verify-then-retry guardrail.
+#
+# Author: Ritesh Ambastha
+
+version: 1
+name: "demo_with_audio"
+description: >
+  Everything demo_fast covers, plus spoken-PII detection via
+  faster-whisper. On first use this downloads Whisper model weights
+  from Hugging Face Hub (a few hundred MB) - it needs outbound
+  internet access the first time a job using this policy runs, then
+  the weights are cached for every run after that.
+
+pii_types:
+  face:
+    enabled: true
+  text:
+    enabled: true
+  audio:
+    enabled: true
+
+agreement_threshold: 2
+custom_keywords: []
+
+retry:
+  max_attempts: 3
+  escalation: "lower_threshold_and_widen_margin"
+  on_unresolved: "warn"
+
+# ---------------------------------------------------------------------------
+# RedactGuard - https://github.com/riteshambastha/redactguard
+# Author: Ritesh Ambastha
+# ---------------------------------------------------------------------------

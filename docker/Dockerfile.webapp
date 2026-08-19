@@ -1,0 +1,42 @@
+# RedactGuard - demo web application image
+#
+# Part of RedactGuard - a self-hosted, privacy-preserving video PII
+# redaction toolkit with ensemble detection and a closed-loop
+# verify-then-retry guardrail.
+#
+# Author: Ritesh Ambastha
+
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY packages/ packages/
+RUN pip install --no-cache-dir -e packages/core -e packages/webapp
+
+# Uploaded videos, redacted output, and the SQLite users/jobs DB all live
+# under REDACTGUARD_WEBAPP_DATA_DIR (default set below) - mount a volume
+# there if job history and accounts should survive a container restart.
+ENV REDACTGUARD_WEBAPP_DATA_DIR=/data
+RUN mkdir -p /data
+
+# No default session secret is baked in - Settings() generates a fresh
+# random one each process start if REDACTGUARD_WEBAPP_SECRET_KEY isn't
+# set, so a container restart just logs everyone out (not a security
+# hole, just an inconvenience). Pass -e REDACTGUARD_WEBAPP_SECRET_KEY=...
+# at `docker run` time if you want sessions to survive a restart.
+
+RUN useradd --create-home --shell /usr/sbin/nologin redactguard \
+    && chown -R redactguard:redactguard /data
+USER redactguard
+
+EXPOSE 8000
+ENTRYPOINT ["redactguard-webapp"]
+
+# ---------------------------------------------------------------------------
+# RedactGuard - https://github.com/riteshambastha/redactguard
+# Author: Ritesh Ambastha
+# ---------------------------------------------------------------------------

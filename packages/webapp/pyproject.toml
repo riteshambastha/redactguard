@@ -1,0 +1,43 @@
+# redactguard-webapp package metadata
+#
+# Part of RedactGuard - a self-hosted, privacy-preserving video PII
+# redaction toolkit with ensemble detection and a closed-loop
+# verify-then-retry guardrail.
+#
+# Author: Ritesh Ambastha
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "redactguard-webapp"
+version = "0.1.0"
+description = "Demo web application for RedactGuard: sign up, log in, upload a video, watch ensemble detection and closed-loop redaction run"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Ritesh Ambastha", email = "ritesh.linux@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    "redactguard-core",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "bcrypt>=4.1",
+    "itsdangerous>=2.1",
+]
+
+[project.scripts]
+redactguard-webapp = "redactguard_webapp.main:main"
+
+[tool.setuptools.packages.find]
+include = ["redactguard_webapp*"]
+
+[tool.setuptools.package-data]
+redactguard_webapp = ["policies/*.yaml", "templates/*.html"]
+
+# ---------------------------------------------------------------------------
+# RedactGuard - https://github.com/riteshambastha/redactguard
+# Author: Ritesh Ambastha
+# ---------------------------------------------------------------------------

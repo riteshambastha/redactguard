@@ -53,6 +53,27 @@ jobs:
       - name: Build GPU image
         run: docker build -f docker/Dockerfile.gpu -t redactguard:gpu .
 
+  build-webapp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build webapp image
+        run: docker build -f docker/Dockerfile.webapp -t redactguard:webapp .
+      - name: Smoke test - server starts and serves the login page
+        run: |
+          docker run -d --rm --name redactguard-webapp-smoke -p 8000:8000 redactguard:webapp
+          # uvicorn needs a moment to come up - retry rather than a fixed sleep.
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8000/login -o /tmp/login.html; then
+              echo "server responded after $i attempt(s)"
+              break
+            fi
+            sleep 1
+          done
+          docker logs redactguard-webapp-smoke || true
+          docker stop redactguard-webapp-smoke
+          grep -qi "log in" /tmp/login.html
+
 # ---------------------------------------------------------------------------
 # RedactGuard - https://github.com/riteshambastha/redactguard
 # Author: Ritesh Ambastha

@@ -1,0 +1,25 @@
+<!-- RedactGuard | Author: Ritesh Ambastha -->
+{% extends "base.html" %}
+{% block title %}Upload - RedactGuard{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Upload a video</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/upload" enctype="multipart/form-data">
+    <label for="video">Video file</label>
+    <input id="video" type="file" name="video" accept="video/*" required>
+    <label for="policy_name">Policy profile</label>
+    <select id="policy_name" name="policy_name">
+      {% for choice in policies %}
+        <option value="{{ choice.profile.name }}">{{ choice.profile.name }}</option>
+      {% endfor %}
+    </select>
+    <p class="muted">
+      {% for choice in policies %}
+        <strong>{{ choice.profile.name }}</strong>: {{ choice.profile.description }}<br>
+      {% endfor %}
+    </p>
+    <button type="submit">Run RedactGuard</button>
+  </form>
+</div>
+{% endblock %}

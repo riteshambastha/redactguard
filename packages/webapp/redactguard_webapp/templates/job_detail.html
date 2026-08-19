@@ -1,0 +1,35 @@
+<!-- RedactGuard | Author: Ritesh Ambastha -->
+{% extends "base.html" %}
+{% block title %}Job {{ job["id"] }} - RedactGuard{% endblock %}
+{% block extra_head %}
+{% if job["status"] in ("queued", "running") %}<meta http-equiv="refresh" content="3">{% endif %}
+{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{{ job["original_filename"] }}</h2>
+  <p>Policy: <strong>{{ job["policy_name"] }}</strong></p>
+  <p>Status: <span class="status-{{ job['status'] }}">{{ job["status"] }}</span>
+    {% if job["status"] in ("queued", "running") %}<span class="muted">(this page refreshes automatically)</span>{% endif %}
+  </p>
+
+  {% if job["status"] == "done" %}
+    <p>Spans detected: {{ job["spans_detected"] }}</p>
+    {% if job["unresolved"] %}
+      <p class="warn">
+        UNRESOLVED - the verifier still flagged PII after all retry attempts.
+        RedactGuard never withholds output (see ADR-0002), so the file below
+        is still the best redaction attempt - route it to human review before
+        distributing it.
+      </p>
+    {% endif %}
+    <p><a href="/jobs/{{ job['id'] }}/download">Download redacted video</a></p>
+    <h3>Audit report</h3>
+    <pre class="report">{{ job["report_markdown"] }}</pre>
+  {% elif job["status"] == "failed" %}
+    <p class="error">Job failed:</p>
+    <pre class="report">{{ job["error_message"] }}</pre>
+  {% endif %}
+
+  <p><a href="/dashboard">&larr; Back to dashboard</a></p>
+</div>
+{% endblock %}
