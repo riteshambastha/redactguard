@@ -38,16 +38,16 @@ transcript ever leaves the machine it runs on.
 
 ```mermaid
 flowchart LR
-    A[input video] --> B[ingest\nffmpeg/PyAV demux + frame sampling]
-    B --> C[detect\nensemble: 2 detectors per PII type]
-    C --> D[vote\nagreement-threshold consensus]
+    A[input video] --> B["ingest: ffmpeg/PyAV demux + frame sampling"]
+    B --> C["detect: ensemble, 2 detectors per PII type"]
+    C --> D["vote: agreement-threshold consensus"]
     D -->|redactguard scan stops here| E[(manifest.json)]
-    D --> F[redact\nblur/pixelate video, mute/beep audio]
-    F --> G[verify\nre-run detect+vote on the redacted draft]
-    G -->|clean| H[(redacted output + report)]
-    G -->|still flagged| I[retry controller\nescalate threshold + margin]
+    D --> F["redact: blur/pixelate video, mute/beep audio"]
+    F --> G["verify: re-run detect+vote on the redacted draft"]
+    G -->|clean| H[(redacted output plus report)]
+    G -->|still flagged| I["retry controller: escalate threshold and margin"]
     I --> F
-    I -->|attempts exhausted| J[(output anyway +\nunresolved warning)]
+    I -->|attempts exhausted| J[(output anyway, unresolved warning)]
 ```
 
 `redactguard scan` runs the pipeline through the vote step only, and
@@ -74,22 +74,25 @@ them means something:
 
 ```mermaid
 flowchart TB
-    subgraph Face
-        F1[Haar cascade\nfrontal face]
-        F2[LBP cascade\nfrontal face]
+    subgraph FACE["Face"]
+        F1["Haar cascade (frontal face)"]
+        F2["LBP cascade (frontal face)"]
     end
-    subgraph Text / documents / plates
-        T1[Tesseract OCR\nreads the text]
-        T2[MSER region detector\nfinds text-shaped regions\nwithout reading them]
+    subgraph TEXT["Text, documents, plates"]
+        T1["Tesseract OCR - reads the text"]
+        T2["MSER region detector - finds text-shaped regions without reading them"]
     end
-    subgraph Audio
-        A1[faster-whisper ASR\ntranscribes speech]
-        A2[Energy-based VAD\nfinds speech intervals\nwithout transcribing]
+    subgraph AUDIO["Audio"]
+        A1["faster-whisper ASR - transcribes speech"]
+        A2["Energy-based VAD - finds speech intervals without transcribing"]
     end
-    F1 & F2 --> V[vote: spatial IoU +\ntemporal overlap]
-    T1 & T2 --> V
-    A1 & A2 --> V
-    V --> S[trusted PII spans\nagreement_threshold met]
+    F1 --> V["vote: spatial IoU plus temporal overlap"]
+    F2 --> V
+    T1 --> V
+    T2 --> V
+    A1 --> V
+    A2 --> V
+    V --> S["trusted PII spans (agreement_threshold met)"]
 ```
 
 Voting requires the same `pii_type`, temporal overlap, and — for anything
@@ -110,15 +113,15 @@ Third-party detectors ship as independent, pip-installable packages —
 
 ```mermaid
 flowchart LR
-    subgraph "your package (pip install anything)"
-        D[YourDetector\n@register_detector]
-        P[pyproject.toml declares the\nredactguard.detectors entry point]
+    subgraph PKG["Your plugin package, pip installed"]
+        D["YourDetector class, uses register_detector"]
+        P["pyproject.toml declares the redactguard.detectors entry point"]
     end
-    subgraph redactguard-core
-        R[registry.py\nimportlib.metadata.entry_points]
-        Run[run_detectors]
+    subgraph CORE["redactguard-core"]
+        R["registry.py - importlib.metadata.entry_points"]
+        Run["run_detectors"]
     end
-    P -.declares.-> D
+    P -->|declares| D
     R -->|discovers at runtime| D
     D --> Run
 ```
