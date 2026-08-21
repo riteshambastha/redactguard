@@ -24,6 +24,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install system dependencies
+        # actions/setup-python's interpreter and GitHub's ubuntu-latest
+        # runner image do NOT include tesseract-ocr, and the pipeline's
+        # OCR detector (packages/core/redactguard_core/detectors/text)
+        # shells out to the real `tesseract` binary via pytesseract - not
+        # a pip package alone. ffmpeg happens to already be preinstalled
+        # on ubuntu-latest, but is listed explicitly anyway so this step
+        # doesn't silently depend on that happening to remain true. These
+        # are exactly the two packages docker/Dockerfile* already
+        # apt-get installs for the same reason (see ADR-0010) - this was
+        # simply never carried over to CI, which is why every run in this
+        # workflow's history has failed on the OCR-dependent tests.
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
       - name: Install
         run: |
           pip install -e packages/core -e packages/cli -e packages/plugin-sdk -e packages/webapp
