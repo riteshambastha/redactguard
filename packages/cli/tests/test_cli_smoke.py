@@ -37,11 +37,21 @@ def test_cli_help():
     assert "batch" in result.output
 
 
+# fontfile= is required, not cosmetic: without it, ffmpeg's drawtext
+# filter resolves fonts by *family name* through fontconfig, which
+# silently depends on some font file existing wherever this test runs -
+# true on a dev machine, not guaranteed on a minimal CI/container image.
+# Pinned to the package CI now installs explicitly (fonts-dejavu-core) -
+# see docs/adr/0017, which found this exact gap breaking docker-build's
+# smoke test the same way it could have broken this fixture.
+_DEJAVU_SANS = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+
 def _make_text_video(path: str) -> None:
     subprocess.run(
         [
             "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=white:s=320x240:d=2",
-            "-vf", "drawtext=text='SSN 123-45-6789 on file':fontcolor=black:fontsize=20:x=10:y=100",
+            "-vf", f"drawtext=fontfile={_DEJAVU_SANS}:text='SSN 123-45-6789 on file':fontcolor=black:fontsize=20:x=10:y=100",
             "-r", "4", path,
         ],
         capture_output=True, check=True,

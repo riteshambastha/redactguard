@@ -62,11 +62,18 @@ _POLICY = PolicyProfile(
 )
 
 
+# fontfile= pinned rather than left to fontconfig's family-name lookup -
+# see docs/adr/0017, which found this exact drawtext pattern with no
+# fontfile= breaking a CI job outright when no font happened to be
+# installed in that environment.
+_DEJAVU_SANS = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+
 def _make_text_video(path: str, text: str = "SSN 123-45-6789 on file") -> None:
     subprocess.run(
         [
             "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=white:s=320x240:d=2",
-            "-vf", f"drawtext=text='{text}':fontcolor=black:fontsize=20:x=10:y=100",
+            "-vf", f"drawtext=fontfile={_DEJAVU_SANS}:text='{text}':fontcolor=black:fontsize=20:x=10:y=100",
             "-r", "4", path,
         ],
         capture_output=True, check=True,

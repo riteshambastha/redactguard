@@ -11,9 +11,14 @@ FROM python:3.11-slim
 # Model weights are downloaded from the model hub and cached in a volume
 # on first run - not baked into this image (see docs/adr/, build-plan log).
 
+# fonts-dejavu-core: not needed by the redaction pipeline itself, but the
+# CI smoke test (docker/smoke_test.sh) uses ffmpeg's drawtext filter to
+# synthesize a fake PII clip, which needs a real font file on disk
+# regardless of --no-install-recommends. See docs/adr/0017.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         tesseract-ocr \
+        fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

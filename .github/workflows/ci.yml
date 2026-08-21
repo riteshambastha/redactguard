@@ -36,7 +36,18 @@ jobs:
         # apt-get installs for the same reason (see ADR-0010) - this was
         # simply never carried over to CI, which is why every run in this
         # workflow's history has failed on the OCR-dependent tests.
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr
+        #
+        # fonts-dejavu-core: several test fixtures (test_cli_smoke.py,
+        # test_orchestrator_run.py, webapp/tests/conftest.py) synthesize
+        # a fake-PII clip via ffmpeg's drawtext filter, which needs a real
+        # font file on disk to resolve a font family - not guaranteed on
+        # any given runner image. Installed explicitly, and every one of
+        # those fixtures now pins an explicit fontfile= to this package's
+        # font rather than trusting fontconfig to find *something*. See
+        # docs/adr/0017 - the same class of "worked locally, unverified
+        # in the real environment" gap this repo already hit once with
+        # tesseract-ocr.
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg tesseract-ocr fonts-dejavu-core
       - name: Install
         run: |
           pip install -e packages/core -e packages/cli -e packages/plugin-sdk -e packages/webapp

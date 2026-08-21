@@ -63,10 +63,15 @@ def text_pii_clip(tmp_path):
     faster-whisper/Hugging Face download path.
     """
     path = str(tmp_path / "clip.mp4")
+    # fontfile= pinned rather than left to fontconfig's family-name lookup
+    # - see docs/adr/0017, which found this exact drawtext pattern with no
+    # fontfile= breaking a CI job outright when no font happened to be
+    # installed in that environment.
+    dejavu_sans = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     subprocess.run(
         [
             "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=white:s=320x240:d=2",
-            "-vf", "drawtext=text='SSN 123-45-6789 on file':fontcolor=black:fontsize=20:x=10:y=100",
+            "-vf", f"drawtext=fontfile={dejavu_sans}:text='SSN 123-45-6789 on file':fontcolor=black:fontsize=20:x=10:y=100",
             "-r", "4", path,
         ],
         capture_output=True, check=True,

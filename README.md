@@ -262,6 +262,7 @@ an accident:
 | [0014](docs/adr/0014-temp-directory-cleanup-and-clean-media-errors.md) | Clean up pipeline temp directories, and raise a clean error for unreadable media |
 | [0015](docs/adr/0015-marketing-landing-page-at-root.md) | A real marketing landing page at "/", not a redirect straight to /login |
 | [0016](docs/adr/0016-ci-was-missing-tesseract-ocr.md) | CI never installed tesseract-ocr, so every run has been failing |
+| [0017](docs/adr/0017-docker-build-smoke-test-was-missing-a-font-package.md) | docker-build's smoke test was missing a font package, not broken by the non-root user switch |
 
 ## Status
 
