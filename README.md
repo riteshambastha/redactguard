@@ -282,6 +282,18 @@ ADR-0010). Treat this as a strong architectural foundation and a real,
 working reference implementation — not a drop-in production redaction
 service yet.
 
+### Benchmarks
+
+A synthetic on-screen text benchmark (300 frames, 491 emails, phone, SSN
+and card numbers) is in
+[`benchmarks/text_pii_benchmark.py`](benchmarks/text_pii_benchmark.py),
+with results in [`benchmarks/results/latest.md`](benchmarks/results/latest.md).
+In short: requiring both text detectors to agree gave zero false alarms
+but found 32% of PII on the first pass; accepting either found 90% but
+flagged 87% of PII-free frames. The verify-then-retry loop closed the
+gap end to end, taking OCR-readable PII from 36 strings to 1. Faces and
+spoken PII are not benchmarked yet.
+
 ## Development
 
 ```bash
